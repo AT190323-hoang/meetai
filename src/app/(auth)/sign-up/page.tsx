@@ -1,0 +1,9 @@
+import { Card } from "@/components/ui/card";
+import { SignUpView } from "@/modules/auth/views/sign-up-view";
+
+const Page = () => {
+   
+    return <SignUpView />;
+}
+export default Page;
+//http://localhost:3000/sign-up

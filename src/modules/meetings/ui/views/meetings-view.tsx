@@ -10,8 +10,8 @@ export const MeetingsView = () => {
     const { data } = useSuspenseQuery(trpc.meetings.getMany.queryOptions({}));
 
     return (
-        <div>
-            {JSON.stringify(data)}
+        <div className= "overflow-x-scroll">
+          {/* {JSON.stringify(data)} */}
         </div>
     );
 };
@@ -32,3 +32,5 @@ export const MeetingsViewError = () => {
             description="Something went wrong" />
     )
 }
+
+//fsw8KXkrJvQogOU5r3uCNBhw7OYll4i0  qULelBvrfTzIZcQf3PpoF

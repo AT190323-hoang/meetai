@@ -11,7 +11,7 @@ import { useState } from "react";
 import { UpdateMeetingDialog } from "../components/update-meeting-dialog";
 import { UpcomingState } from "../components/upcoming-state";
 import { ActiveState } from "../components/active-state";
-import { Cancel } from "@radix-ui/react-alert-dialog";
+
 import { CancelledState } from "../components/cancelled-state";
 import { ProcessingState } from "../components/processing-state";
 import { CompletedState } from "../components/completed-state";
@@ -79,9 +79,7 @@ export const MeetingIdView = ({ meetingId }: Props) => {
                 {isActive && <ActiveState meetingId={meetingId} />}
                 {isUpcoming &&
                     <UpcomingState
-                        meetingId={meetingId}
-                        onCancelMeeting={() => { }}
-                        isCancelling={false}
+                        meetingId={meetingId}                   
                     />}
             </div>
         </>

@@ -1,11 +1,10 @@
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MeetingGetOne } from "../../types";
 import {
     SparklesIcon,
     FileTextIcon,
     BookOpenTextIcon,
-    FileVideoIcon,
     ClockFadingIcon,
 } from "lucide-react";
 import MarkDown from "react-markdown";

@@ -2,10 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
-import { PanelLeftCloseIcon, PanelLeftIcon, Search, SearchIcon } from "lucide-react";
+import { PanelLeftCloseIcon, PanelLeftIcon, SearchIcon } from "lucide-react";
 import { DashboardCommand } from "./dashboard-command";
-import { Key, useEffect, useState } from "react";
-import { se } from "date-fns/locale";
+import {  useEffect, useState } from "react";
+
 
 export const DashboardNavbar = () => {
     const { state, toggleSidebar, isMobile } = useSidebar();

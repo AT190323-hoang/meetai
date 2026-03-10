@@ -11,7 +11,7 @@ import { meetingsInsertSchema, meetingsUpdateSchema } from '../schemas';
 import { MeetingStatus, StreamTranscriptItem } from '../types';
 import { streamVideo } from '@/lib/stream-video';
 import { generateAvatarUri } from '@/lib/avatar';
-import { it } from 'node:test';
+
 import { streamChat } from '@/lib/stream-chat';
 
 export const meetingsRouter = createTRPCRouter({

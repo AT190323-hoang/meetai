@@ -2,7 +2,7 @@ import {SearchIcon} from "lucide-react";
 
 import {Input} from "@/components/ui/input";
 import {useAgentsFilters} from "../../hooks/use-agents-filters";
-import { set } from "date-fns";
+
 
 export const AgentsSearchFilter = () => {
 const [filters, setFilters] = useAgentsFilters();

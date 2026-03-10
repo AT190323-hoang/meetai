@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { ChevronsUpDownIcon, Command } from "lucide-react";
+import { ChevronsUpDownIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import {
     CommandList,
     CommandResponsiveDialog,
 } from "@/components/ui/command"
-import { on } from "events";
+
 
 interface Props {
     options: Array<{

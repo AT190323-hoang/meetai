@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+
 import { auth } from "@/lib/auth";
 import { SignUpView } from "@/modules/auth/views/sign-up-view";
 import { headers } from "next/headers";

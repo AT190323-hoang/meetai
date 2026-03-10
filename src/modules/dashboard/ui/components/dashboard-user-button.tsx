@@ -16,13 +16,13 @@ import {
     DrawerTitle,
     DrawerTrigger
 } from "@/components/ui/drawer";
-import { da } from "zod/v4/locales";
+
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { GeneratedAvatar } from "@/components/generated-avatar";
 import { ChevronDownIcon, CreditCardIcon, LogOutIcon } from "lucide-react";
-import { user } from "@/db/schema";
+
 import { useRouter } from "next/navigation";
-import { fr } from "date-fns/locale";
+
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 

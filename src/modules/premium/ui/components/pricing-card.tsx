@@ -71,7 +71,6 @@ export const PricingCard = ({
     title,
     description,
     priceSuffix,
-    className,
     buttonText,
     onClick,
 }: Props) => {

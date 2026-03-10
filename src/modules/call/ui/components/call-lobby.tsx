@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { generateAvatarUri } from "@/lib/avatar";
 
 import "@stream-io/video-react-sdk/dist/css/styles.css";
-import { use } from "react";
+
 
 interface Props {
     onJoin: () => void;

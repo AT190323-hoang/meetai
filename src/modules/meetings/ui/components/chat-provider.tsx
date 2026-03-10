@@ -2,7 +2,7 @@
 
 import {authClient} from "@/lib/auth-client";
 import {LoadingState} from "@/components/loading-state";
-import { ChartColumnIcon } from "lucide-react";
+
 import { ChatUI } from "./chat-ui";
 
 interface Props {

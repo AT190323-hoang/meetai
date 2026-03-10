@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { set } from "date-fns";
 import { NewAgentDialog } from "@/modules/agents/ui/components/new-agent-dialog";
+import { useRouter } from "next/navigation";
 
 interface MeetingFormProps {
     onSuccess?: (id?: string) => void;
@@ -38,7 +39,9 @@ export const MeetingForm = ({
     onCancel,
     initialValues,
 }: MeetingFormProps) => {
+    
     const trpc = useTRPC();
+    const router = useRouter() ;
     const queryClient = useQueryClient();
    
     const [openNewAgentDialog, setOpenNewAgentDialog] = useState(false);
@@ -64,7 +67,9 @@ export const MeetingForm = ({
             onError: (error) => {
                 toast.error(error.message);
 
-                //TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
+               if (error.data?.code === "FORBIDDEN") {
+                router.push("/upgrade");
+               }
             },
         }),
     );

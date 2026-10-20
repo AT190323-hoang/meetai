@@ -2,9 +2,12 @@ import { db } from "@/db";
 import { agents, meetings, user } from "@/db/schema";
 import { inngest } from "@/inngest/client";
 import { StreamTranscriptItem } from "@/modules/meetings/types";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
+import { checkSafety } from "@/lib/nemotron";
+import { recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
+import { detectJailbreakLLM, detectJailbreakNemoGuard } from "@/lib/jailbreak";
 
 const summerizer = createAgent({
   name: "summarizer",
@@ -108,5 +111,99 @@ export const meetingsProcessing = inngest.createFunction(
         })
         .where(eq(meetings.id, event.data.meetingId))
     })
+  }
+);
+
+// Nemotron context is ~8K tokens, so each side of a turn is capped
+const MAX_TURN_CHARS = 4000;
+const AUDIT_BATCH_SIZE = 5;
+
+export const meetingsSafetyAudit = inngest.createFunction(
+  { id: "meetings/safety-audit" },
+  { event: "meetings/processing" },
+  async ({ event, step }) => {
+    const meetingId: string = event.data.meetingId;
+
+    const turns = await step.run("build-turns", async () => {
+      const [meeting] = await db
+        .select({ agentId: meetings.agentId })
+        .from(meetings)
+        .where(eq(meetings.id, meetingId));
+
+      if (!meeting) {
+        return [];
+      }
+
+      const transcript = JSONL.parse<StreamTranscriptItem>(
+        await fetch(event.data.transcriptUrl).then((res) => res.text())
+      );
+
+      // Merge consecutive items from the same speaker into one utterance
+      const utterances: { role: "user" | "agent"; text: string }[] = [];
+      for (const item of transcript) {
+        const role = item.speaker_id === meeting.agentId ? "agent" : "user";
+        const last = utterances[utterances.length - 1];
+        if (last && last.role === role) {
+          last.text += ` ${item.text}`;
+        } else {
+          utterances.push({ role, text: item.text });
+        }
+      }
+
+      // Pair each user utterance with the agent reply that follows it
+      const pairs: { query: string; response?: string }[] = [];
+      for (const utterance of utterances) {
+        const text = utterance.text.trim().slice(0, MAX_TURN_CHARS);
+        const last = pairs[pairs.length - 1];
+        if (utterance.role === "user") {
+          pairs.push({ query: text });
+        } else if (last && last.response === undefined) {
+          last.response = text;
+        } else {
+          pairs.push({ query: "", response: text });
+        }
+      }
+
+      return pairs;
+    });
+
+    for (let i = 0; i < turns.length; i += AUDIT_BATCH_SIZE) {
+      await step.run(`audit-turns-${i}`, async () => {
+        const batch = turns.slice(i, i + AUDIT_BATCH_SIZE);
+
+        await Promise.all(batch.map(async (turn) => {
+          const [result, ...jailbreakResults] = await Promise.all([
+            checkSafety(turn),
+            ...(turn.query
+              ? [detectJailbreakNemoGuard(turn.query), detectJailbreakLLM(turn.query)]
+              : []),
+          ]);
+
+          if (turn.query) {
+            await recordUserInputEvents(
+              { meetingId, source: "post_call", content: turn.query },
+              [result, ...jailbreakResults]
+            );
+          }
+          if (turn.response) {
+            await recordSafetyEvent({
+              meetingId,
+              source: "post_call",
+              role: "agent",
+              content: turn.response,
+              result,
+            });
+          }
+        }));
+      });
+    }
+
+    await step.run("finalize-safety-status", async () => {
+      // Meetings already flagged by the realtime/chat guard or by this audit stay flagged
+      await db
+        .update(meetings)
+        .set({ safetyStatus: "safe" })
+        .where(and(eq(meetings.id, meetingId), ne(meetings.safetyStatus, "flagged")));
+    });
   }
 );

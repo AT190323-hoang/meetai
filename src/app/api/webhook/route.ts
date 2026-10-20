@@ -17,8 +17,14 @@ import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs"
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
+import { attachRealtimeGuard } from "@/lib/realtime-guard";
+import { checkSafety } from "@/lib/nemotron";
+import { checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+const CHAT_REFUSAL =
+    "Sorry, I can't help with that request. Is there anything else about the meeting I can help you with?";
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
     return streamVideo.verifyWebhook(body, signature);
@@ -100,11 +106,20 @@ export async function POST(req: NextRequest) {
             agentUserId: existingAgent.id,
         });
 
+        // REALTIME_GUARD=off runs the agent without the guard (baseline for comparisons)
+        const guardEnabled = process.env.REALTIME_GUARD !== "off";
+
         realtimeClient.updateSession({
             instructions: existingAgent.instructions,
             // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies
             turn_detection: { type: "server_vad" },
+            // User transcripts are required by the Nemotron realtime guard
+            ...(guardEnabled && { input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const } }),
         });
+
+        if (guardEnabled) {
+            attachRealtimeGuard(realtimeClient, { meetingId });
+        }
     } else if (eventType === "call.session_participant_left") {
         const event = payload as CallSessionParticipantLeftEvent;
         const meetingId = event.call_cid.split(":")[1];
@@ -228,22 +243,46 @@ export async function POST(req: NextRequest) {
                     content: message.text || "",
                 }));
 
-            const GPTResponse = await openaiClient.chat.completions.create({
-                messages: [
-                    { role: "system", content: instructions },
-                    ...previousMessages,
-                    { role: "user", content: text },
-                ],
-                model: "gpt-4o",
-            });
+            // Chat is text-only, so the guard can block before and after GPT
+            const inputCheck = await checkUserInput(text);
+            void recordUserInputEvents(
+                { meetingId: channelId, source: "chat", content: text },
+                inputCheck.results
+            );
 
-            const GPTResponseText = GPTResponse.choices[0].message.content;
+            let GPTResponseText: string | null = CHAT_REFUSAL;
 
-            if (!GPTResponseText) {
-                return NextResponse.json(
-                    { error: "No response from GPT" },
-                    { status: 400 }
-                );
+            if (!inputCheck.unsafe) {
+                const GPTResponse = await openaiClient.chat.completions.create({
+                    messages: [
+                        { role: "system", content: instructions },
+                        ...previousMessages,
+                        { role: "user", content: text },
+                    ],
+                    model: "gpt-4o",
+                });
+
+                GPTResponseText = GPTResponse.choices[0].message.content;
+
+                if (!GPTResponseText) {
+                    return NextResponse.json(
+                        { error: "No response from GPT" },
+                        { status: 400 }
+                    );
+                }
+
+                const outputCheck = await checkSafety({ query: text, response: GPTResponseText });
+                void recordSafetyEvent({
+                    meetingId: channelId,
+                    source: "chat",
+                    role: "agent",
+                    content: GPTResponseText,
+                    result: outputCheck,
+                });
+
+                if (outputCheck.responseSafe === false) {
+                    GPTResponseText = CHAT_REFUSAL;
+                }
             }
             const avatarUrl = generateAvatarUri({
                 seed: existingAgent.name,

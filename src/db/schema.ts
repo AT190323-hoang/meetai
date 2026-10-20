@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, pgEnum, integer } from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text('id').primaryKey(),
@@ -68,6 +68,12 @@ export const meetingStatus = pgEnum("meeting_status", [
   "cancelled",
 ]);
 
+export const safetyStatus = pgEnum("safety_status", [
+  "pending",
+  "safe",
+  "flagged",
+]);
+
 export const meetings = pgTable("meetings", {
   id: text("id")
     .primaryKey()
@@ -85,7 +91,43 @@ export const meetings = pgTable("meetings", {
   transcriptUrl: text("transcript_url"),
   recordingUrl: text("recording_url"),
   summary: text("summary"),
+  safetyStatus: safetyStatus("safety_status").notNull().default("pending"),
   createAt: timestamp("created_at").notNull().defaultNow(),
   updateAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const safetySource = pgEnum("safety_source", [
+  "realtime",
+  "chat",
+  "post_call",
+]);
+
+export const safetyRole = pgEnum("safety_role", ["user", "agent"]);
+
+export const safetyDetector = pgEnum("safety_detector", [
+  "content_safety",
+  "jailbreak_nemoguard",
+  "jailbreak_llm",
+]);
+
+// One row per Nemotron verdict, used for flagging and for latency/coverage metrics
+export const safetyEvents = pgTable("safety_events", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  meetingId: text("meeting_id")
+    .notNull()
+    .references(() => meetings.id, { onDelete: 'cascade' }),
+  source: safetySource("source").notNull(),
+  role: safetyRole("role").notNull(),
+  detector: safetyDetector("detector").notNull().default("content_safety"),
+  content: text("content").notNull(),
+  unsafe: boolean("unsafe").notNull(),
+  categories: text("categories").array().notNull().default([]),
+  latencyMs: integer("latency_ms").notNull(),
+  // Realtime only: whether the verdict arrived while the agent was still generating
+  caughtInTime: boolean("caught_in_time"),
+  error: text("error"),
+  createAt: timestamp("created_at").notNull().defaultNow(),
 });
 

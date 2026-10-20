@@ -1,6 +1,6 @@
 # Vấn đề mở & việc chờ làm
 
-> Cập nhật: 18/10/2026. Mục nào có quyết định thì chuyển kết luận vào tài liệu liên quan và gạch khỏi đây.
+> Cập nhật: 20/10/2026. Mục nào có quyết định thì chuyển kết luận vào tài liệu liên quan và gạch khỏi đây.
 
 ## A. Quyết định cần bàn
 

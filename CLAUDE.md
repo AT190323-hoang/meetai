@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Meet.AI: a Next.js 15 (App Router) app where users create AI "agents" (a name plus system instructions) and run video meetings with them. An OpenAI Realtime agent joins the Stream Video call. After the call ends, the transcript is summarized by GPT-4o in the background, and users can chat with the agent about the meeting. Free-tier limits and subscriptions go through Polar.
 
+## Project context and working agreement
+
+This repo is the user's graduation thesis (Học viện Kỹ thuật Mật mã, An toàn thông tin): "AI Agent hội thoại video thời gian thực tích hợp cơ chế kiểm duyệt nội dung". The report deadline is **31/10/2026**. The user communicates in Vietnamese; reply in Vietnamese. Prefer work that produces thesis evidence (measurements for Chapter 3), and flag any mismatch between the thesis text and the code.
+
+At the start of a session, read `docs/van-de-mo.md` (open decisions, next tasks) and the newest file in `docs/nhat-ky/` to see where work stopped.
+
+Big features follow `docs/quy-trinh-lam-viec.md`: survey (read-only) → proposal and plan, then **stop for the user's approval** → build in small slices → the user runs real calls/UI tests while you prepare the test script and analyze logs → update docs → commit/push only after the user agrees. When the user says "tạm dừng" or "ghi lại để bàn sau", record the item in `docs/van-de-mo.md` and wait for "làm tiếp".
+
+- Do not decide the pending policy questions in `docs/van-de-mo.md` section A (severity tiers such as PII block vs log-only, strict mode, multi-turn context) on your own; raise them for discussion.
+- Work on feature branches and push only those. Do not merge into `main`: Vercel deploys `main` to production.
+- Thesis `.docx`/`.pdf` files in `docs/` are gitignored (the repo is public). The user keeps them in cloud storage, so they may be missing from a fresh clone.
+
 ## Commands
 
 ```bash

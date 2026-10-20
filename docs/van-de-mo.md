@@ -21,6 +21,9 @@ Chi tiết trong [de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](de-x
 - Guard hiện chỉ đánh giá **từng lượt**, cả ở hậu kiểm.
 - ⚠️ `safety-guard.md` (D2) và bản đồ án (2.4(d), bảng quyết định) đang ghi hậu kiểm "phát hiện tấn công nhiều lượt", **sai so với code**. Phải sửa code hoặc sửa tài liệu trước khi nộp.
 
+### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (chờ quyết định)
+Góp ý và 5 câu hỏi cần chốt (ai được xem nội dung cách ly, leo thang ngắt call, dismiss, lưu bằng chứng, liên hệ A1) trong [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md](de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md). Điểm cần lưu ý: ẩn ở UI chưa đủ, phải chặn ở server; summary từ nội dung bị flag có thể tái đưa payload vào chat.
+
 ### A3. Triển khai production
 Agent cần process chạy liên tục — Vercel không đáp ứng. Lựa chọn: worker riêng (Railway / Fly / VPS) giữ kết nối agent + guard; hoặc demo đồ án chạy local.
 

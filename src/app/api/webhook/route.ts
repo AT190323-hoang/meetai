@@ -102,6 +102,8 @@ export async function POST(req: NextRequest) {
 
         realtimeClient.updateSession({
             instructions: existingAgent.instructions,
+            // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies
+            turn_detection: { type: "server_vad" },
         });
     } else if (eventType === "call.session_participant_left") {
         const event = payload as CallSessionParticipantLeftEvent;

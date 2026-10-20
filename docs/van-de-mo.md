@@ -37,7 +37,7 @@ Agent cần process chạy liên tục — Vercel không đáp ứng. Lựa ch�
 
 - [ ] **Đổi webhook Stream về Vercel** sau khi test (`https://meetai-pi-nine.vercel.app/api/webhook`).
 - [ ] Bản Vercel đang chạy code cũ có lỗi: `ws` bufferutil, giao thức beta (`session.type`), VAD tắt → agent không nhận instructions. Cần deploy code mới (và vẫn còn vấn đề A3).
-- [x] ~~Commit các thay đổi hiện tại~~ — đã commit 20/10 trên `29-finish` (4 commit, chưa push). Các file `.docx`/`.pdf` đồ án trong `docs/` chưa commit.
+- [x] ~~Commit các thay đổi hiện tại~~ — đã commit 20/10 trên `29-finish` và đã push lên `origin/29-finish` (chưa merge `main` vì merge sẽ tự deploy production trên Vercel). File `.docx`/`.pdf` đồ án được đưa vào `.gitignore` (repo công khai); quản lý phiên bản bằng Google Drive/OneDrive.
 - [ ] `npm audit` còn báo một số lỗ hổng trong dependency — chưa xử lý.
 
 ## D. Tài liệu đồ án

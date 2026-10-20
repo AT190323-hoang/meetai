@@ -1,0 +1,13 @@
+# Tài liệu dự án Meet.AI
+
+| Tài liệu | Nội dung |
+|---|---|
+| [kien-truc-tong-quan.md](kien-truc-tong-quan.md) | Kiến trúc toàn hệ thống: thành phần, luồng cuộc họp, cơ sở dữ liệu |
+| [safety-guard.md](safety-guard.md) | Lớp kiểm duyệt an toàn (NVIDIA Nemotron + phát hiện jailbreak): thiết kế, quyết định, số liệu |
+| [van-de-mo.md](van-de-mo.md) | Các vấn đề còn mở, quyết định đang chờ, việc cần làm tiếp |
+| [de-xuat/](de-xuat/) | Các đề xuất thiết kế đang chờ quyết định |
+| [quy-trinh-lam-viec.md](quy-trinh-lam-viec.md) | Quy trình làm việc đề xuất cho các chức năng tiếp theo |
+| [nhat-ky/](nhat-ky/) | Nhật ký từng phiên làm việc: đã làm gì, lỗi gì, sửa thế nào |
+
+Tài liệu đồ án (Word): `ĐỀ XUẤT ĐỒ ÁN.docx`, `ĐỒ ÁN.docx`.
+Hướng dẫn cho Claude Code nằm ở `CLAUDE.md` (thư mục gốc).

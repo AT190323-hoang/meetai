@@ -1,6 +1,6 @@
 # Vấn đề mở & việc chờ làm
 
-> Cập nhật: 20/10/2026. Mục nào có quyết định thì chuyển kết luận vào tài liệu liên quan và gạch khỏi đây.
+> Cập nhật: 21/10/2026. Mục nào có quyết định thì chuyển kết luận vào tài liệu liên quan và gạch khỏi đây.
 
 ## A. Quyết định cần bàn
 
@@ -21,8 +21,13 @@ Chi tiết trong [de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](de-x
 - Guard hiện chỉ đánh giá **từng lượt**, cả ở hậu kiểm.
 - ⚠️ `safety-guard.md` (D2) và bản đồ án (2.4(d), bảng quyết định) đang ghi hậu kiểm "phát hiện tấn công nhiều lượt", **sai so với code**. Phải sửa code hoặc sửa tài liệu trước khi nộp.
 
-### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (chờ quyết định)
-Góp ý và 5 câu hỏi cần chốt (ai được xem nội dung cách ly, leo thang ngắt call, dismiss, lưu bằng chứng, liên hệ A1) trong [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md](de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md). Điểm cần lưu ý: ẩn ở UI chưa đủ, phải chặn ở server; summary từ nội dung bị flag có thể tái đưa payload vào chat.
+### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (**đã chốt 21/10**, trừ phần phụ thuộc A1)
+Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md](de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md). Tóm tắt:
+- Cách ly: owner bị ẩn summary/transcript/recording, **chặn ở server**; xác nhận vi phạm thì xem lại được, cờ giữ nguyên, có ghi log. Không cho tự gỡ cờ.
+- Leo thang: cảnh báo ở vi phạm thứ 5, cảnh báo lần cuối ở thứ 9, kill-switch (kết thúc call) ở thứ 10. Đếm theo lượt nói của người dùng, chỉ nhóm mức chặn. Ngưỡng qua env `SAFETY_WARN_AT` / `SAFETY_KILL_AT`.
+- Chat sau họp khóa vĩnh viễn với meeting flagged (chống stored injection qua summary).
+- Giữ nội dung gốc trong `safety_events`; ẩn danh PII để hướng phát triển.
+- **Còn chờ A1** để biết nhóm nào là "mức chặn".
 
 ### A3. Triển khai production
 Agent cần process chạy liên tục — Vercel không đáp ứng. Lựa chọn: worker riêng (Railway / Fly / VPS) giữ kết nối agent + guard; hoặc demo đồ án chạy local.

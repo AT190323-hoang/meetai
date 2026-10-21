@@ -1,6 +1,6 @@
 # Đề xuất: Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố
 
-> Ngày: 20/10/2026. Trạng thái: **chờ quyết định** (bạn đọc lại tối nay rồi chốt).
+> Ngày: 20/10/2026. Trạng thái: **đã chốt 21/10/2026** (xem mục 6), trừ phần phụ thuộc A1.
 > Ghi chú: góp ý dựa trên code và tài liệu hiện có, chưa đối chiếu với đề cương gốc. Cần dán phần ý định ban đầu của kill-switch để đối chiếu.
 
 ## 1. "Kill-switch" đang gộp ba việc khác nhau
@@ -60,6 +60,32 @@ Số liệu thu được cho Chương 3: thời gian từ vi phạm đến khi n
 3. Dismiss false positive có cho owner tự làm không? Nếu có, kẻ vi phạm tự gỡ cờ được, nên có thể cần giới hạn.
 4. Lưu nội dung gốc hay bản đã che trong `safety_events`?
 5. A1 (chính sách phân mức) phải bàn cùng lúc, vì ngưỡng quarantine phụ thuộc vào nó.
+
+## 6. Quyết định (21/10/2026)
+
+**Q1 — Cách ly ẩn khỏi ai:** chọn hướng (a). Không thêm vai trò reviewer.
+- Owner (người tạo meeting, cũng là người nói chuyện với agent) bị ẩn summary, transcript, recording khi meeting `flagged`.
+- Owner bấm **xác nhận đã vi phạm** thì xem lại được. Lần xác nhận được ghi lại (ai, lúc nào). Cờ `flagged` **giữ nguyên**.
+- Chặn ở **server**: `meetings.getOne`, `meetings.getMany`, `meetings.getTranscript` không trả `summary` / `transcriptUrl` / `recordingUrl` / transcript khi meeting flagged mà chưa xác nhận. UI chỉ hiển thị cảnh báo và nút xác nhận.
+- Sau khi xác nhận, owner xem được nội dung và danh sách các câu bị gắn cờ kèm nhóm vi phạm (trang liệt kê sự kiện).
+- Trong đồ án phải nói rõ: việc ẩn **không phải hàng rào chặn owner**. Giá trị nằm ở: người dùng biết mình bị ghi nhận, có bằng chứng xác nhận, chặn ở server, cắt đường stored injection.
+
+**Q2 — Leo thang trong cuộc gọi:**
+- Vi phạm 1–4: từ chối như hiện tại.
+- Vi phạm thứ 5: từ chối + **cảnh báo** "nếu tiếp tục vi phạm, cuộc trò chuyện sẽ bị kết thúc".
+- Vi phạm thứ 9: **cảnh báo lần cuối**.
+- Vi phạm thứ 10: **kill-switch**: agent nói câu kết thúc, server kết thúc cuộc gọi cho mọi người, meeting bị cách ly.
+- **Cách đếm:** số **lượt nói của người dùng** bị kết luận unsafe (mỗi câu tính 1 lần dù nhiều detector bắt). Vi phạm của agent không tính. Chỉ đếm các nhóm thuộc **mức chặn** theo A1.
+- Ngưỡng cấu hình qua biến môi trường `SAFETY_WARN_AT=5`, `SAFETY_KILL_AT=10` (cảnh báo lần cuối ở `SAFETY_KILL_AT - 1`). Khi demo có thể hạ thấp mà không sửa code.
+
+**Q3 — Gỡ cờ (dismiss):** owner **không** tự gỡ cờ được, vì người vi phạm sẽ tự xóa dấu vết. Dismiss false positive để ở hướng phát triển (khi có vai trò reviewer).
+- **Chat sau họp bị khóa vĩnh viễn** với meeting `flagged` (lựa chọn A), kể cả sau khi xác nhận. Webhook `message.new` không gọi GPT, UI ẩn ô nhập và hiện thông báo khóa.
+  - Lý do: chat đưa `summary` vào system prompt mà guard chat không kiểm summary → payload trong transcript bị flag có thể lọt vào summary rồi "cài" vào agent (stored injection).
+  - Hướng phát triển (lựa chọn B): hậu kiểm chạy trước khi tóm tắt, loại các lượt bị gắn cờ để tạo summary "sạch" rồi mở lại chat.
+
+**Q4 — Bằng chứng:** tạm giữ **nội dung gốc** trong `safety_events` (cần cho phân tích false positive ở Chương 3). Ghi rõ là đánh đổi với mục 4.5 (ẩn danh PII), ẩn danh để hướng phát triển.
+
+**Q5 — Phụ thuộc A1:** chỉ vi phạm thuộc **mức chặn** mới làm meeting `flagged` (kích hoạt cách ly + khóa chat) và được tính vào ngưỡng Q2. Vi phạm mức thấp chỉ ghi nhận. **A1 chưa chốt** → là việc cần bàn tiếp theo.
 
 ## Liên quan
 

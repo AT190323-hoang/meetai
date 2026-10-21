@@ -1,10 +1,10 @@
 import { user } from './../../../db/schema';
 import JSONL from 'jsonl-parse-stringify';
-import { agents, meetings } from '@/db/schema';
+import { agents, meetings, safetyEvents } from '@/db/schema';
 import { db } from '@/db';
 import { createTRPCRouter, premiumProcedure, protectedProcedure } from '@/trpc/init';
 import { z } from "zod";
-import { and, count, desc, eq, getTableColumns, ilike, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, getTableColumns, ilike, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE } from '@/constants';
 import { TRPCError } from '@trpc/server';
 import { meetingsInsertSchema, meetingsUpdateSchema } from '../schemas';
@@ -13,6 +13,15 @@ import { streamVideo } from '@/lib/stream-video';
 import { generateAvatarUri } from '@/lib/avatar';
 
 import { streamChat } from '@/lib/stream-chat';
+import { getFlagCause } from '@/lib/safety-events';
+
+// A flagged meeting stays hidden from its owner until they acknowledge the warning (decision A5)
+const isQuarantined = (meeting: { safetyStatus: string; safetyAcknowledgedAt: Date | null }) =>
+    meeting.safetyStatus === "flagged" && meeting.safetyAcknowledgedAt === null;
+
+// The list view never needs meeting content, so it is not sent at all
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const { summary, transcriptUrl, recordingUrl, ...listColumns } = getTableColumns(meetings);
 
 export const meetingsRouter = createTRPCRouter({
     generateChatToken: protectedProcedure.mutation(async ({ ctx }) => {
@@ -39,6 +48,13 @@ export const meetingsRouter = createTRPCRouter({
                 throw new TRPCError({
                     code: "NOT_FOUND",
                     message: "Meeting not found",
+                });
+            }
+
+            if (isQuarantined(existingMeeting)) {
+                throw new TRPCError({
+                    code: "FORBIDDEN",
+                    message: "Acknowledge the safety warning to view this transcript",
                 });
             }
 
@@ -256,7 +272,75 @@ export const meetingsRouter = createTRPCRouter({
                 throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
             }
 
-            return existingMeeting;
+            const quarantined = isQuarantined(existingMeeting);
+            const flaggedBy = existingMeeting.safetyStatus === "flagged"
+                ? await getFlagCause(existingMeeting.id)
+                : null;
+
+            return {
+                ...existingMeeting,
+                summary: quarantined ? null : existingMeeting.summary,
+                transcriptUrl: quarantined ? null : existingMeeting.transcriptUrl,
+                recordingUrl: quarantined ? null : existingMeeting.recordingUrl,
+                quarantined,
+                flaggedBy,
+            };
+        }),
+    acknowledgeSafety: protectedProcedure
+        .input(z.object({ id: z.string() }))
+        .mutation(async ({ input, ctx }) => {
+            // The timestamp is the evidence of who lifted the quarantine and when; the flag itself stays
+            const [acknowledgedMeeting] = await db
+                .update(meetings)
+                .set({ safetyAcknowledgedAt: new Date() })
+                .where(and(
+                    eq(meetings.id, input.id),
+                    eq(meetings.userId, ctx.auth.user.id),
+                    eq(meetings.safetyStatus, "flagged"),
+                    isNull(meetings.safetyAcknowledgedAt),
+                ))
+                .returning();
+
+            if (!acknowledgedMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "No unacknowledged flagged meeting found" });
+            }
+
+            return acknowledgedMeeting;
+        }),
+    getSafetyEvents: protectedProcedure
+        .input(z.object({ id: z.string() }))
+        .query(async ({ input, ctx }) => {
+            const [existingMeeting] = await db
+                .select()
+                .from(meetings)
+                .where(and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id)));
+
+            if (!existingMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+            }
+
+            if (isQuarantined(existingMeeting)) {
+                throw new TRPCError({
+                    code: "FORBIDDEN",
+                    message: "Acknowledge the safety warning to view safety events",
+                });
+            }
+
+            // Only verdicts the policy tiered; safe verdicts are not shown
+            return db
+                .select({
+                    id: safetyEvents.id,
+                    source: safetyEvents.source,
+                    role: safetyEvents.role,
+                    detector: safetyEvents.detector,
+                    severity: safetyEvents.severity,
+                    categories: safetyEvents.categories,
+                    content: safetyEvents.content,
+                    createAt: safetyEvents.createAt,
+                })
+                .from(safetyEvents)
+                .where(and(eq(safetyEvents.meetingId, input.id), isNotNull(safetyEvents.severity)))
+                .orderBy(asc(safetyEvents.createAt));
         }),
     getMany: protectedProcedure
         .input(z.object({
@@ -285,7 +369,7 @@ export const meetingsRouter = createTRPCRouter({
 
             const data = await db
                 .select({
-                    ...getTableColumns(meetings),
+                    ...listColumns,
                     agent: agents,
                     duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
                 })

@@ -131,6 +131,23 @@ export async function hasCareSignal(meetingId: string) {
     }
 }
 
+/**
+ * Who caused a meeting's flag: the user (any blocked user turn) or otherwise the agent. The UI
+ * words the warning differently, since an agent-caused flag is not the user's violation.
+ */
+export async function getFlagCause(meetingId: string): Promise<"user" | "agent"> {
+    const [userBlock] = await db
+        .select({ id: safetyEvents.id })
+        .from(safetyEvents)
+        .where(and(
+            eq(safetyEvents.meetingId, meetingId),
+            eq(safetyEvents.role, "user"),
+            eq(safetyEvents.severity, "block"),
+        ))
+        .limit(1);
+    return userBlock ? "user" : "agent";
+}
+
 /** Records every result of a `checkUserInput` call. */
 export function recordUserInputEvents(
     params: Omit<Parameters<typeof recordSafetyEvent>[0], "role" | "result">,

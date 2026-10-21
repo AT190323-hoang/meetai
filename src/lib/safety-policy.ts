@@ -53,6 +53,10 @@ const TARGETS_OTHERS = new Set(["threat", "hate/identity hate"]);
 /** Jailbreak and prompt-injection attempts are always blocked. */
 export const JAILBREAK_SEVERITY: Severity = "block";
 
+/** Vietnam content policy (A1 section 3): violations are blocked, unverified rumours only logged. */
+export const VN_POLICY_SEVERITY: Severity = "block";
+export const VN_UNVERIFIED_SEVERITY: Severity = "log";
+
 /** Nemotron returns names without codes and with varying case, e.g. "Guns and Illegal Weapons". */
 export function normalizeCategory(category: string) {
     const name = category.trim().toLowerCase().replace(/\.$/, "");

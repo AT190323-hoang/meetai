@@ -14,8 +14,11 @@ Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/202
 - Một chính sách chung trong `src/lib/safety-policy.ts`; thêm cột `severity`.
 - Thứ tự làm: phân mức → kill-switch/cách ly → `vn_policy` → thực nghiệm.
 
-### A2. Có làm chế độ "Strict mode" (chặn trước khi agent trả lời) không
-Đánh đổi: +0.6–1.8 s mỗi lượt. Cần thử nghiệm xem có khả thi với client GA (`turn_detection.create_response: false`).
+### A2. Shadow hay strict mode (**hướng đã chốt 21/10, đang khảo sát**)
+- Sản phẩm chạy **một chế độ guard cố định** do hệ thống quyết định: shadow (song song, hiện tại) **hoặc** strict (chặn trước khi agent trả lời). **Không** cho người dùng hay từng agent tự chọn, vì như vậy là giao quyết định về mức an toàn cho người có thể lạm dụng.
+- Chọn chế độ nào: **khảo sát rồi thống nhất** (khả thi với client GA `turn_detection.create_response: false`, độ trễ thêm mỗi lượt, khoảng lọt của shadow).
+- Biến môi trường `REALTIME_GUARD=off|shadow|strict` chỉ để **người vận hành chạy thực nghiệm** Chương 3 (so sánh 3 cấu hình), không phải tùy chọn sản phẩm.
+- Làm sau chính sách phân mức và kill-switch (strict dựa vào bảng mức A1: chỉ chặn trước câu người dùng ở mức chặn; câu agent vẫn kiểm song song).
 
 ### A4. Ngữ cảnh nhiều lượt (**đã chốt 21/10**)
 - **Giữ nguyên code:** cả ba điểm kiểm duyệt đánh giá **từng lượt** (câu người dùng kiểm riêng; câu agent kiểm theo cặp với câu hỏi). Đây đúng là cách dùng trong model card Nemotron (template một lượt, đầu ra một `User Safety` + một `Response Safety`; dữ liệu huấn luyện chủ yếu là cặp prompt/response).
@@ -32,8 +35,12 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - Giữ nội dung gốc trong `safety_events`; ẩn danh PII để hướng phát triển.
 - "Mức chặn" theo A1.
 
-### A3. Triển khai production
-Agent cần process chạy liên tục — Vercel không đáp ứng. Lựa chọn: worker riêng (Railway / Fly / VPS) giữ kết nối agent + guard; hoặc demo đồ án chạy local.
+### A3. Triển khai production (**đã chốt 21/10**)
+- Agent cần process chạy liên tục (giữ WebSocket tới OpenAI suốt cuộc gọi), Vercel serverless không đáp ứng.
+- **Chọn cách 2:** cả app chạy `next start` trên **AWS EC2** (t2/t3.micro, vùng Singapore `ap-southeast-1`, cùng vùng với Neon), dùng free tier của người dùng. Không phải sửa code. Kèm: `pm2`, Caddy (HTTPS tự động), swap 2 GB để build (hoặc build sẵn), Inngest Cloud, trỏ webhook Stream về server. Đặt AWS Budgets cảnh báo chi phí; Security Group chỉ mở 80/443, SSH chỉ cho IP người dùng.
+- **Làm sau cùng:** deploy thử, rồi đến khi demo mới deploy thật (merge `main`). Trước đó phát triển và test ở local + ngrok.
+- **Hướng phát triển (ghi vào đồ án):** tách worker riêng cho agent (Vercel cho giao diện + worker giữ kết nối agent và guard) để mở rộng và cô lập lỗi khi có nhiều cuộc gọi đồng thời.
+- Ghi chú đồ án: dữ liệu cuộc họp nằm ngoài Việt Nam (Neon Singapore; Stream, OpenAI, NVIDIA ở Mỹ). Nêu như một giới hạn về lưu trữ dữ liệu (tra lại quy định Luật An ninh mạng).
 
 ## B. Việc tiếp theo (tạm dừng — chờ bạn bảo làm)
 

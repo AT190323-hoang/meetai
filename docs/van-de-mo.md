@@ -8,7 +8,8 @@
 Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md). Tóm tắt:
 - **Chặn** (cắt lời, `flagged`, tính ngưỡng): S1–S5, S7, S8, S11, S16, S17, S22, jailbreak, `vn_policy`.
 - **Ghi nhận** (chỉ lưu): S9, S10, S12–S15, S18–S21, S23.
-- **S6** tự hại: cắt lời + phản hồi hỗ trợ, `flagged`, không tính ngưỡng kill-switch.
+- **S6** tự hại (sửa 21/10): mức `care`. Câu người dùng không cắt lời, không `flagged`, bật chế độ hỗ trợ một lần cho cả phiên. Chỉ cắt lời và `flagged` (do agent) khi agent nói nội dung có hại. Không thêm detector.
+- Chỉ dẫn từ chối chuyển sang dạng bổ sung vào instructions gốc.
 - Detector mới **`vn_policy`** (gpt-4o-mini, chính sách nội dung Việt Nam) cho cả người dùng và agent; thêm chỉ dẫn mặc định cho agent.
 - Một chính sách chung trong `src/lib/safety-policy.ts`; thêm cột `severity`.
 - Thứ tự làm: phân mức → kill-switch/cách ly → `vn_policy` → thực nghiệm.
@@ -20,6 +21,7 @@ Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/202
 Chi tiết trong [de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md), cũng bao gồm A2 (strict mode).
 - Guard hiện chỉ đánh giá **từng lượt**, cả ở hậu kiểm.
 - ⚠️ `safety-guard.md` (D2) và bản đồ án (2.4(d), bảng quyết định) đang ghi hậu kiểm "phát hiện tấn công nhiều lượt", **sai so với code**. Phải sửa code hoặc sửa tài liệu trước khi nộp.
+- **Bằng chứng mới (21/10, `safety-guard.md` mục 9d):** đưa cả chuỗi hội thoại vào Nemotron gây **dính cờ** (câu bình thường sau một lượt vi phạm cũng bị unsafe) và báo nhầm câu trả lời của agent. Nghiêng về: không đưa ngữ cảnh vào guard realtime, sửa tài liệu cho đúng code, ghi tấn công nhiều lượt là giới hạn / hướng phát triển. **Chưa chốt.**
 
 ### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (**đã chốt 21/10**)
 Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md](de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md). Tóm tắt:

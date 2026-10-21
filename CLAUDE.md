@@ -14,7 +14,7 @@ At the start of a session, read `docs/van-de-mo.md` (open decisions, next tasks)
 
 Big features follow `docs/quy-trinh-lam-viec.md`: survey (read-only) → proposal and plan, then **stop for the user's approval** → build in small slices → the user runs real calls/UI tests while you prepare the test script and analyze logs → update docs → commit/push only after the user agrees. When the user says "tạm dừng" or "ghi lại để bàn sau", record the item in `docs/van-de-mo.md` and wait for "làm tiếp".
 
-- Do not decide the pending questions in `docs/van-de-mo.md` section A (currently strict mode, multi-turn context, production deployment) on your own; raise them for discussion. Decided policies live in `docs/de-xuat/` (severity tiers A1, kill-switch/quarantine A5); follow them when implementing.
+- Do not decide the pending questions in `docs/van-de-mo.md` section A (currently strict mode and production deployment) on your own; raise them for discussion. Decided policies live in `docs/de-xuat/` (severity tiers A1, multi-turn context A4: keep per-turn checks, kill-switch/quarantine A5); follow them when implementing.
 - Branches: `29-finish` is the integration (dev) branch. Big features go on `feat/<name>` branched from `29-finish` and merge back into it; small fixes and docs go straight onto `29-finish`. Never merge into `main` unless the user says it is ready to deploy: Vercel deploys `main` to production. Merge `main` back into `29-finish` whenever `main` changes.
 - Thesis `.docx`/`.pdf` files in `docs/` are gitignored (the repo is public). The user keeps them in cloud storage, so they may be missing from a fresh clone.
 

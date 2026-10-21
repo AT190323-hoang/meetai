@@ -107,7 +107,7 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 | # | Quyết định | Lý do | Đánh đổi |
 |---|---|---|---|
 | D1 | Guard realtime **song song**, không chặn trước | Chặn trước thêm ~0.6–1.8 s mỗi lượt, mất tính realtime | Câu vi phạm có thể lọt một đoạn ngắn |
-| D2 | Giữ cả kiểm duyệt **sau cuộc gọi** | Thấy được toàn bộ ngữ cảnh, tấn công nhiều lượt | Chậm, chỉ phát hiện sau |
+| D2 | Giữ cả kiểm duyệt **sau cuộc gọi** | Kiểm lại toàn bộ transcript (từng cặp hỏi–đáp) bằng transcript chính thức của Stream; bắt được những gì guard realtime bỏ lỡ (lỗi API, server khựng) | Chậm, chỉ phát hiện sau. **Không** phát hiện tấn công nhiều lượt (xem A4) |
 | D3 | **Fail-open**: detector lỗi → coi như an toàn, ghi lỗi | Guard sập không được làm hỏng cuộc gọi | Khi guard lỗi, nội dung không được kiểm |
 | D4 | Ba detector cho đầu vào, OR kết quả | Nemotron không bắt jailbreak; NemoGuard bỏ sót câu ngắn/tiếng Việt | Thêm chi phí API (gpt-4o-mini) và lượt gọi NVIDIA |
 | D5 | Dùng API hosted của NVIDIA, không tự host | Không cần GPU; độ trễ chấp nhận được | Phụ thuộc giới hạn tần suất API miễn phí |
@@ -138,7 +138,7 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 
 ## 8. Giới hạn đã biết
 
-- Guard realtime đánh giá **từng lượt**; tấn công dàn trải nhiều lượt chủ yếu dựa vào kiểm duyệt sau cuộc gọi.
+- Cả ba điểm kiểm duyệt (realtime, chat, sau cuộc gọi) đều đánh giá **từng lượt**. Tấn công dàn trải nhiều lượt (crescendo), trong đó từng lượt riêng lẻ đều vô hại, **không được phát hiện**. Đây là quyết định có chủ đích (A4, 21/10/2026): Nemotron được thiết kế để chấm một cặp câu hỏi và câu trả lời, và khi đưa cả chuỗi hội thoại vào thì gây dính cờ và báo nhầm (mục 9d). Hướng phát triển: một "giám khảo cả cuộc họp" bằng LLM ở hậu kiểm, một kết luận cho mỗi meeting, không tính ngưỡng kill-switch.
 - Lời từ chối khi câu trả lời **đã phát xong** không thu hồi được phần đã nói.
 - Nemotron trả **một danh sách nhóm chung** cho cả câu hỏi + trả lời; khi kiểm câu agent, nhóm vi phạm có thể thuộc về câu người dùng.
 - Ở chế độ dev, server thỉnh thoảng "khựng" ~10 s khi biên dịch → kết quả guard đến muộn, đôi khi timeout kết nối DB/NVIDIA.

@@ -17,11 +17,12 @@ Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/202
 ### A2. Có làm chế độ "Strict mode" (chặn trước khi agent trả lời) không
 Đánh đổi: +0.6–1.8 s mỗi lượt. Cần thử nghiệm xem có khả thi với client GA (`turn_detection.create_response: false`).
 
-### A4. Ngữ cảnh nhiều lượt + giá trị của guardrail (chưa quyết)
-Chi tiết trong [de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md), cũng bao gồm A2 (strict mode).
-- Guard hiện chỉ đánh giá **từng lượt**, cả ở hậu kiểm.
-- ⚠️ `safety-guard.md` (D2) và bản đồ án (2.4(d), bảng quyết định) đang ghi hậu kiểm "phát hiện tấn công nhiều lượt", **sai so với code**. Phải sửa code hoặc sửa tài liệu trước khi nộp.
-- **Bằng chứng mới (21/10, `safety-guard.md` mục 9d):** đưa cả chuỗi hội thoại vào Nemotron gây **dính cờ** (câu bình thường sau một lượt vi phạm cũng bị unsafe) và báo nhầm câu trả lời của agent. Nghiêng về: không đưa ngữ cảnh vào guard realtime, sửa tài liệu cho đúng code, ghi tấn công nhiều lượt là giới hạn / hướng phát triển. **Chưa chốt.**
+### A4. Ngữ cảnh nhiều lượt (**đã chốt 21/10**)
+- **Giữ nguyên code:** cả ba điểm kiểm duyệt đánh giá **từng lượt** (câu người dùng kiểm riêng; câu agent kiểm theo cặp với câu hỏi). Đây đúng là cách dùng trong model card Nemotron (template một lượt, đầu ra một `User Safety` + một `Response Safety`; dữ liệu huấn luyện chủ yếu là cặp prompt/response).
+- **Không** đưa cả chuỗi hội thoại vào Nemotron: đo ngày 21/10 (`safety-guard.md` mục 9d) cho thấy dính cờ và báo nhầm câu agent.
+- **Sửa tài liệu cho đúng code:** `safety-guard.md` đã sửa (D2, mục 8). ⚠️ **Bản đồ án** (2.4(d), bảng quyết định) vẫn ghi hậu kiểm "phát hiện tấn công nhiều lượt", người dùng tự sửa hoặc gửi file để sửa.
+- **Để sau (phương án B):** "giám khảo cả cuộc họp" bằng LLM trong `meetingsSafetyAudit`, một kết luận cho mỗi meeting, không tính ngưỡng. Chỉ làm sau chính sách phân mức, kill-switch và `vn_policy`, và chỉ khi bộ kịch bản crescendo (mọi lượt riêng lẻ đều qua guard) cho thấy lỗ hổng thật.
+- Phần "giá trị của guardrail" (7 lý do, bảng 4 ô) vẫn ở [de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md) mục 4.
 
 ### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (**đã chốt 21/10**)
 Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md](de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md). Tóm tắt:

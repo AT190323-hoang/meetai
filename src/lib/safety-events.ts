@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetings, safetyEvents } from "@/db/schema";
@@ -146,6 +146,24 @@ export async function getFlagCause(meetingId: string): Promise<"user" | "agent">
         ))
         .limit(1);
     return userBlock ? "user" : "agent";
+}
+
+/**
+ * Atomically counts a blocked user turn and returns the new total, or null when the write fails
+ * (the caller then falls back to its in-memory count).
+ */
+export async function incrementBlockedTurns(meetingId: string) {
+    try {
+        const [row] = await db
+            .update(meetings)
+            .set({ blockedTurns: sql`${meetings.blockedTurns} + 1` })
+            .where(eq(meetings.id, meetingId))
+            .returning({ blockedTurns: meetings.blockedTurns });
+        return row?.blockedTurns ?? null;
+    } catch (error) {
+        console.error(`[safety] failed to count blocked turn for meeting ${meetingId}`, error);
+        return null;
+    }
 }
 
 /** Records every result of a `checkUserInput` call. */

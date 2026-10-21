@@ -132,7 +132,12 @@ export async function POST(req: NextRequest) {
         });
 
         if (guardEnabled) {
-            attachRealtimeGuard(realtimeClient, { meetingId, instructions: existingAgent.instructions });
+            attachRealtimeGuard(realtimeClient, {
+                meetingId,
+                instructions: existingAgent.instructions,
+                // Kill-switch: ends the call for every participant
+                endCall: () => call.end(),
+            });
         }
     } else if (eventType === "call.session_participant_left") {
         const event = payload as CallSessionParticipantLeftEvent;

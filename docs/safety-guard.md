@@ -106,6 +106,23 @@ Chạy song song với function tóm tắt, cùng event `meetings/processing`:
 3. Kiểm tra theo lô 5 cặp (mỗi bên tối đa 4000 ký tự — Nemotron giới hạn ngữ cảnh ~8K token). Câu người dùng được kiểm **riêng** bằng `checkUserInput` (giống trong cuộc gọi); cặp câu hỏi + câu trả lời chỉ dùng để chấm câu agent (từ 21/10, xem mục 9c).
 4. Cuối cùng đặt `safety_status = safe` nếu chưa bị `flagged`.
 
+### 3.4 Kill-switch và cách ly (A5, nhánh `feat/kill-switch`)
+
+**Leo thang trong cuộc gọi** (`src/lib/realtime-guard.ts`):
+- Mỗi **lượt người dùng** ở mức `block` cộng `meetings.blocked_turns` (cộng nguyên tử trong DB; lỗi DB thì dùng bộ đếm trong bộ nhớ). Đếm theo lượt, không theo detector; không tính `care`, `log` và câu agent.
+- Lượt thứ `SAFETY_WARN_AT` (mặc định 5): từ chối kèm cảnh báo. Lượt thứ `SAFETY_KILL_AT - 1`: cảnh báo lần cuối.
+- Lượt thứ `SAFETY_KILL_AT` (mặc định 10): agent nói câu kết thúc, khi câu đó xong (`response.done`) server gọi `call.end()` cho mọi người; hẹn giờ dự phòng 15 s. Sau kill-switch guard bỏ qua mọi hành động khác.
+- Không thể vào lại để gắn agent lần nữa: `call.session_started` chỉ gắn agent khi meeting đang `upcoming`, và người dùng rời đi là cuộc gọi kết thúc.
+
+**Cách ly ở server** (`src/modules/meetings/server/procedures.ts`):
+- Meeting `flagged` mà chưa có `safety_acknowledged_at` là **đang cách ly**: `getOne` để trống `summary` / `transcriptUrl` / `recordingUrl`, `getTranscript` và `getSafetyEvents` trả `FORBIDDEN`.
+- `getMany` không bao giờ gửi 3 trường nội dung (trang danh sách không dùng).
+- `getOne` trả thêm `quarantined` và `flaggedBy` (`user` nếu có lượt người dùng mức `block`, ngược lại `agent`).
+- `acknowledgeSafety`: owner xác nhận, ghi `safety_acknowledged_at` (bằng chứng ai, lúc nào). Cờ `flagged` giữ nguyên, không tự gỡ được.
+- **Chat bị khóa vĩnh viễn** với meeting `flagged` (kể cả sau xác nhận): webhook trả `CHAT_LOCKED`, không gọi GPT, vì summary đưa vào prompt có thể mang nội dung đã bị gắn cờ (stored injection).
+
+**Giao diện:** huy hiệu `flagged` ở danh sách; banner cảnh báo với câu chữ theo `flaggedBy` (người dùng: "Confirm violation"; agent: "The system blocked unsafe content from the assistant" + "I understand"); các tab nội dung hiện lý do bị ẩn; tab chat hiện "Chat is locked"; tab **Safety** liệt kê sự kiện có mức sau khi xác nhận.
+
 ## 4. Lưu trữ kết quả
 
 Mọi kết quả của mọi detector đều đi qua `recordSafetyEvent` (`src/lib/safety-events.ts`):
@@ -136,6 +153,8 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 | `NEMOTRON_MODEL` | `nvidia/llama-3.1-nemotron-safety-guard-8b-v3` | Model id |
 | `JAILBREAK_DETECT_URL` | `https://ai.api.nvidia.com/v1/security/nvidia/nemoguard-jailbreak-detect` | Endpoint NemoGuard |
 | `JAILBREAK_CLASSIFIER_MODEL` | `gpt-4o-mini` | Model phân loại jailbreak |
+| `SAFETY_WARN_AT` | `5` | Lượt bị chặn thứ mấy thì cảnh báo |
+| `SAFETY_KILL_AT` | `10` | Lượt bị chặn thứ mấy thì kill-switch (cảnh báo lần cuối ở lượt trước đó). Hạ thấp khi demo |
 | `REALTIME_GUARD` | (bật) | `off` để tắt guard trong cuộc gọi |
 
 ## 7. Kết quả thử nghiệm trong cuộc gọi thật (18/10/2026, meeting `RiUEWXiClf16J_9jHFYdS`)
@@ -156,7 +175,7 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 - Lời từ chối khi câu trả lời **đã phát xong** không thu hồi được phần đã nói.
 - Nemotron trả **một danh sách nhóm chung** cho cả câu hỏi + trả lời; khi kiểm câu agent, nhóm vi phạm có thể thuộc về câu người dùng.
 - Ở chế độ dev, server thỉnh thoảng "khựng" ~10 s khi biên dịch → kết quả guard đến muộn, đôi khi timeout kết nối DB/NVIDIA.
-- Chưa có kill-switch trên giao diện (ẩn summary/recording khi `flagged`) và chưa có trang quản trị.
+- Chưa có vai trò reviewer/quản trị: owner tự xác nhận để xem lại nội dung; không gỡ cờ (dismiss) báo nhầm được.
 - Chưa chạy được trên Vercel (serverless không giữ được kết nối agent).
 
 ## 9. Thử nghiệm S6 (tự hại) và ngữ cảnh nhiều lượt (21/10/2026)

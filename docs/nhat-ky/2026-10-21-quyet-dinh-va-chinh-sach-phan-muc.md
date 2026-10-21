@@ -31,6 +31,15 @@
 - Hậu kiểm: kiểm riêng câu người dùng.
 - Type-check, lint, build đều qua. **Chưa test** với chat và cuộc gọi thật.
 
+## 5. Kill-switch và cách ly (nhánh `feat/kill-switch`, tách từ `feat/safety-policy`)
+- Schema: `meetings.blocked_turns`, `meetings.safety_acknowledged_at` (đã `db:push`).
+- Server: cách ly trong `getOne` / `getTranscript` / `getSafetyEvents`, `getMany` không gửi nội dung, `acknowledgeSafety`, khóa chat với meeting flagged.
+- Guard realtime: đếm lượt bị chặn, cảnh báo ở 5 và 9, kill-switch ở 10 (`call.end()`), cấu hình qua `SAFETY_WARN_AT` / `SAFETY_KILL_AT`.
+- Giao diện: huy hiệu flagged, banner theo `flaggedBy`, tab Safety, các tab nội dung giải thích lý do bị ẩn.
+- Khảo sát phát hiện: không thể vào lại cuộc gọi để gắn agent lần nữa (điều kiện trạng thái `upcoming` có sẵn), nên không cần kiểm tra thêm.
+- Type-check, lint, build qua. **Chưa test.**
+
 ## Việc tiếp theo
 1. Người dùng test chat (bằng chữ) và cuộc gọi thật theo kịch bản trong chat của phiên này; xong thì merge `feat/safety-policy` về `29-finish`.
-2. Kill-switch và cách ly (A5).
+2. Test `feat/kill-switch`: giao diện + cuộc gọi với `SAFETY_WARN_AT=2`, `SAFETY_KILL_AT=3`.
+3. `vn_policy`.

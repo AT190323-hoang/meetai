@@ -12,6 +12,7 @@ node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/<tên>.mjs
 |---|---|---|
 | `s6-agent-responses.mjs` | Câu trả lời của agent cho người có ý định tự hại: câu hỗ trợ có bị báo nhầm không, câu có hại có bị bắt không | 13/13 đúng (8 hỗ trợ → safe, 5 có hại → unsafe) |
 | `s6-user-only.mjs` | Câu của người dùng kiểm riêng (như `checkUserInput`), 3 lần mỗi câu | 11/12 đúng, ổn định qua 3 lần |
+| `rt-stats.cjs` | Độ trễ từng detector và `caught_in_time` từ bảng `safety_events` (chỉ đọc DB) | Xem `docs/khao-sat/a2-shadow-vs-strict.md` |
 | `s6-multiturn.mjs` | Đưa cả chuỗi hội thoại vào Nemotron: có giúp không, có "dính cờ" không | 12/16; dính cờ 2/2, báo nhầm câu hỗ trợ của agent |
 
 Chi tiết và kết luận: [docs/safety-guard.md](../../docs/safety-guard.md) mục 9.

@@ -16,7 +16,7 @@ Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/202
 
 ### A2. Shadow hay strict mode (**hướng đã chốt 21/10, đang khảo sát**)
 - Sản phẩm chạy **một chế độ guard cố định** do hệ thống quyết định: shadow (song song, hiện tại) **hoặc** strict (chặn trước khi agent trả lời). **Không** cho người dùng hay từng agent tự chọn, vì như vậy là giao quyết định về mức an toàn cho người có thể lạm dụng.
-- Chọn chế độ nào: **khảo sát rồi thống nhất** (khả thi với client GA `turn_detection.create_response: false`, độ trễ thêm mỗi lượt, khoảng lọt của shadow).
+- Chọn chế độ nào: **khảo sát rồi thống nhất**. Kết quả phần không cần gọi điện: [khao-sat/a2-shadow-vs-strict.md](khao-sat/a2-shadow-vs-strict.md). Shadow chỉ cắt kịp khoảng 5/9 lượt; ứng viên mạnh là **strict có giới hạn thời gian** (quá T giây thì quay về shadow). Còn cần cuộc gọi thật (mục 5 của khảo sát).
 - Biến môi trường `REALTIME_GUARD=off|shadow|strict` chỉ để **người vận hành chạy thực nghiệm** Chương 3 (so sánh 3 cấu hình), không phải tùy chọn sản phẩm.
 - Làm sau chính sách phân mức và kill-switch (strict dựa vào bảng mức A1: chỉ chặn trước câu người dùng ở mức chặn; câu agent vẫn kiểm song song).
 
@@ -46,9 +46,9 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 
 - [ ] Kill-switch trên UI: ẩn summary / recording / transcript khi meeting `flagged`, hiển thị cảnh báo.
 - [ ] Trang liệt kê sự kiện vi phạm của từng meeting.
-- [ ] Áp dụng chính sách phân mức (sau khi chốt A1).
+- [ ] Áp dụng chính sách phân mức (A1 đã chốt) → kill-switch/cách ly (A5) → `vn_policy` → chế độ guard (A2) → thực nghiệm → deploy (A3).
+- [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
 - [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI).
-- [ ] Gửi kèm vài lượt hội thoại trước khi kiểm (ngữ cảnh) cho guard realtime.
 - [ ] Ẩn danh PII trước khi lưu (mục 4.5 đề cương).
 
 ## C. Việc cần làm ngay về vận hành
@@ -67,6 +67,7 @@ Việc còn lại:
 - [ ] Bạn đọc duyệt bản sửa; xác nhận **cách 1** (giữ mục 3.2.4 "Kết quả thử nghiệm sơ bộ") hay **cách 2** (bỏ mục đó).
 - [ ] Điền kết quả thực nghiệm chính thức vào 3.2.1 và 3.2.2 (hiện đang ghi "sẽ bổ sung").
 - [ ] Mục 2.4(e) ghi kill-switch, trang quản trị và ẩn danh PII là "đang hoàn thiện". Cần làm xong hoặc sửa lại câu chữ trước khi nộp.
+- [ ] **Sau khi deploy AWS (A3):** viết lại phần an toàn tầng triển khai (Chương 2) và kiểm thử hạ tầng (Chương 3, Hình 3.10) đang ghi Vercel/serverless (khoảng 10 đoạn + 1 hình). Đảo lập luận "không phải quản trị máy chủ nên giảm bề mặt tấn công" thành các biện pháp bảo mật tự quản trị; dùng việc agent bị ngắt trên Vercel làm lý do chuyển sang EC2.
 - [ ] Các sơ đồ mới (kiến trúc, Safety Guard, shadow guard) đang là bản vẽ tự động; có thể vẽ lại bằng draw.io nếu muốn đồng bộ với các sơ đồ UML cũ.
 
 Các điểm sai đã sửa trong bản sửa:

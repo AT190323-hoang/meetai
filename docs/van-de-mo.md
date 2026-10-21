@@ -48,6 +48,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [~] **Kill-switch và cách ly (A5): đã code trên nhánh `feat/kill-switch` (tách từ `feat/safety-policy`, 21/10), chờ test** — giao diện (dùng meeting bị flagged sau test chat) và cuộc gọi thật với `SAFETY_WARN_AT=2`, `SAFETY_KILL_AT=3`. Merge theo thứ tự: `feat/safety-policy` → `29-finish`, rồi `feat/kill-switch` → `29-finish`.
 - [~] **`vn_policy`: khảo sát xong** (`khao-sat/vn-policy.md`, nhánh `feat/vn-policy`), kế hoạch 5 lát đã duyệt 21/10: tách riêng, áp dụng cho cả câu người dùng và câu agent, chỉ dẫn mặc định cho mọi agent (người dùng không tắt được). **Đã code 21/10 (detector, áp dụng cho cả 3 điểm kiểm duyệt, chỉ dẫn mặc định), chờ test.**
   - Chờ bàn: **mở rộng nội dung chính sách** (hiện chỉ 4 nhóm). Đề xuất bổ sung: đường chín đoạn, vùng biển/biên giới; xúc phạm quốc kỳ, quốc huy, quốc ca, lãnh tụ, anh hùng dân tộc; phỉ báng chính quyền, chiến tranh tâm lý, ly khai; chia rẽ khối đại đoàn kết; bịa đặt khẳng định như sự thật. Mỗi nhóm cần câu thử và đo lại.
+- [~] **Phân quyền Stream: đã sửa trên nhánh `feat/stream-auth` (tách từ `feat/vn-policy`, 21/10)** — role `user`, call token theo meeting, kênh chat do server tạo, webhook chat chỉ trả lời chủ meeting, **cấu hình role `user` của call type `default` đã bị thu hẹp trên Stream (dùng chung với production)**. Kiểm chứng 16/16 bằng script; chờ test giao diện + cuộc gọi thật. Chi tiết: `khao-sat/stream-auth.md`.
 - [ ] Sau đó: chế độ guard (A2) → thực nghiệm → deploy (A3).
 - [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
 - [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI).
@@ -60,6 +61,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [ ] Bản Vercel đang chạy code cũ có lỗi: `ws` bufferutil, giao thức beta (`session.type`), VAD tắt → agent không nhận instructions. Cần deploy code mới (và vẫn còn vấn đề A3).
 - [x] ~~Commit các thay đổi hiện tại~~ — đã commit 20/10 trên `29-finish` và đã push lên `origin/29-finish` (chưa merge `main` vì merge sẽ tự deploy production trên Vercel). File `.docx`/`.pdf` đồ án được đưa vào `.gitignore` (repo công khai); quản lý phiên bản bằng Google Drive/OneDrive.
 - [ ] `npm audit` còn báo một số lỗ hổng trong dependency — chưa xử lý.
+- [ ] Đồ án: thêm phần lỗ hổng phân quyền Stream và bảng kiểm chứng (`khao-sat/stream-auth.md`); mục "Stream token ràng buộc call_id" giờ đã đúng với code.
 
 ## D. Tài liệu đồ án
 

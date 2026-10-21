@@ -8,14 +8,14 @@ Meet.AI: a Next.js 15 (App Router) app where users create AI "agents" (a name pl
 
 ## Project context and working agreement
 
-This repo is the user's graduation thesis (Học viện Kỹ thuật Mật mã, An toàn thông tin): "AI Agent hội thoại video thời gian thực tích hợp cơ chế kiểm duyệt nội dung". The report deadline is **31/10/2026**. The user communicates in Vietnamese; reply in Vietnamese. Prefer work that produces thesis evidence (measurements for Chapter 3), and flag any mismatch between the thesis text and the code.
+This repo is the user's graduation thesis (Học viện Kỹ thuật Mật mã, An toàn thông tin): "AI Agent hội thoại video thời gian thực tích hợp cơ chế kiểm duyệt nội dung". There is no fixed deadline right now; the user will say when there is one. The user communicates in Vietnamese; reply in Vietnamese. Prefer work that produces thesis evidence (measurements for Chapter 3), and flag any mismatch between the thesis text and the code.
 
 At the start of a session, read `docs/van-de-mo.md` (open decisions, next tasks) and the newest file in `docs/nhat-ky/` to see where work stopped.
 
 Big features follow `docs/quy-trinh-lam-viec.md`: survey (read-only) → proposal and plan, then **stop for the user's approval** → build in small slices → the user runs real calls/UI tests while you prepare the test script and analyze logs → update docs → commit/push only after the user agrees. When the user says "tạm dừng" or "ghi lại để bàn sau", record the item in `docs/van-de-mo.md` and wait for "làm tiếp".
 
-- Do not decide the pending policy questions in `docs/van-de-mo.md` section A (severity tiers such as PII block vs log-only, strict mode, multi-turn context) on your own; raise them for discussion.
-- Work on feature branches and push only those. Do not merge into `main`: Vercel deploys `main` to production.
+- Do not decide the pending questions in `docs/van-de-mo.md` section A (currently strict mode, multi-turn context, production deployment) on your own; raise them for discussion. Decided policies live in `docs/de-xuat/` (severity tiers A1, kill-switch/quarantine A5); follow them when implementing.
+- Branches: `29-finish` is the integration (dev) branch. Big features go on `feat/<name>` branched from `29-finish` and merge back into it; small fixes and docs go straight onto `29-finish`. Never merge into `main` unless the user says it is ready to deploy: Vercel deploys `main` to production. Merge `main` back into `29-finish` whenever `main` changes.
 - Thesis `.docx`/`.pdf` files in `docs/` are gitignored (the repo is public). The user keeps them in cloud storage, so they may be missing from a fresh clone.
 
 ## Commands

@@ -1,6 +1,6 @@
 # Đề xuất: Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố
 
-> Ngày: 20/10/2026. Trạng thái: **đã chốt 21/10/2026** (xem mục 6), trừ phần phụ thuộc A1.
+> Ngày: 20/10/2026. Trạng thái: **đã chốt 21/10/2026** (xem mục 6). Mức chặn theo [A1](2026-10-21-chinh-sach-phan-muc-vi-pham.md).
 > Ghi chú: góp ý dựa trên code và tài liệu hiện có, chưa đối chiếu với đề cương gốc. Cần dán phần ý định ban đầu của kill-switch để đối chiếu.
 
 ## 1. "Kill-switch" đang gộp ba việc khác nhau
@@ -47,7 +47,7 @@
 
 Số liệu thu được cho Chương 3: thời gian từ vi phạm đến khi ngăn chặn, `caught_in_time`, tỷ lệ cách ly nhầm.
 
-## 4. Phạm vi gợi ý cho 11 ngày còn lại (hạn nộp 31/10)
+## 4. Phạm vi gợi ý
 
 - **Bắt buộc:** chặn ở server (trường `summary`/URL), banner cảnh báo, trang liệt kê sự kiện, nút review/dismiss có ghi log.
 - **Nên làm:** leo thang ngắt call sau N vi phạm.
@@ -85,7 +85,7 @@ Số liệu thu được cho Chương 3: thời gian từ vi phạm đến khi n
 
 **Q4 — Bằng chứng:** tạm giữ **nội dung gốc** trong `safety_events` (cần cho phân tích false positive ở Chương 3). Ghi rõ là đánh đổi với mục 4.5 (ẩn danh PII), ẩn danh để hướng phát triển.
 
-**Q5 — Phụ thuộc A1:** chỉ vi phạm thuộc **mức chặn** mới làm meeting `flagged` (kích hoạt cách ly + khóa chat) và được tính vào ngưỡng Q2. Vi phạm mức thấp chỉ ghi nhận. **A1 chưa chốt** → là việc cần bàn tiếp theo.
+**Q5 — Phụ thuộc A1:** chỉ vi phạm thuộc **mức chặn** mới làm meeting `flagged` (kích hoạt cách ly + khóa chat) và được tính vào ngưỡng Q2. Vi phạm mức thấp chỉ ghi nhận. A1 đã chốt ngày 21/10, xem [2026-10-21-chinh-sach-phan-muc-vi-pham.md](2026-10-21-chinh-sach-phan-muc-vi-pham.md).
 
 ## Liên quan
 

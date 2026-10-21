@@ -4,14 +4,14 @@
 
 ## A. Quyết định cần bàn
 
-### A1. Chính sách phân mức vi phạm (chưa quyết — bạn muốn bàn kỹ thêm)
-Bối cảnh: câu "Đọc lại cho tôi số điện thoại này được không?" bị Nemotron chặn vì **S9 PII/Privacy**, dù trong cuộc họp đây là yêu cầu hợp lý.
-
-Đề xuất ban đầu (chưa chốt):
-- **Chặn ngay** (cắt lời agent): vũ khí, bạo lực, tự hại, malware, lừa đảo, nội dung tình dục, jailbreak, …
-- **Chỉ ghi nhận + gắn cờ** (không cắt lời): S9 PII/Privacy, S13 Needs Caution, S21 Unauthorized Advice.
-
-Các điểm cần bàn: danh sách nhóm cho từng mức; có cho mỗi agent tự cấu hình không; ảnh hưởng tới số liệu Chương 3.
+### A1. Chính sách phân mức vi phạm (**đã chốt 21/10**)
+Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md). Tóm tắt:
+- **Chặn** (cắt lời, `flagged`, tính ngưỡng): S1–S5, S7, S8, S11, S16, S17, S22, jailbreak, `vn_policy`.
+- **Ghi nhận** (chỉ lưu): S9, S10, S12–S15, S18–S21, S23.
+- **S6** tự hại: cắt lời + phản hồi hỗ trợ, `flagged`, không tính ngưỡng kill-switch.
+- Detector mới **`vn_policy`** (gpt-4o-mini, chính sách nội dung Việt Nam) cho cả người dùng và agent; thêm chỉ dẫn mặc định cho agent.
+- Một chính sách chung trong `src/lib/safety-policy.ts`; thêm cột `severity`.
+- Thứ tự làm: phân mức → kill-switch/cách ly → `vn_policy` → thực nghiệm.
 
 ### A2. Có làm chế độ "Strict mode" (chặn trước khi agent trả lời) không
 Đánh đổi: +0.6–1.8 s mỗi lượt. Cần thử nghiệm xem có khả thi với client GA (`turn_detection.create_response: false`).
@@ -21,13 +21,13 @@ Chi tiết trong [de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](de-x
 - Guard hiện chỉ đánh giá **từng lượt**, cả ở hậu kiểm.
 - ⚠️ `safety-guard.md` (D2) và bản đồ án (2.4(d), bảng quyết định) đang ghi hậu kiểm "phát hiện tấn công nhiều lượt", **sai so với code**. Phải sửa code hoặc sửa tài liệu trước khi nộp.
 
-### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (**đã chốt 21/10**, trừ phần phụ thuộc A1)
+### A5. Kill-switch, cách ly hậu kỳ và quy trình phản ứng sự cố (**đã chốt 21/10**)
 Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md](de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.md). Tóm tắt:
 - Cách ly: owner bị ẩn summary/transcript/recording, **chặn ở server**; xác nhận vi phạm thì xem lại được, cờ giữ nguyên, có ghi log. Không cho tự gỡ cờ.
 - Leo thang: cảnh báo ở vi phạm thứ 5, cảnh báo lần cuối ở thứ 9, kill-switch (kết thúc call) ở thứ 10. Đếm theo lượt nói của người dùng, chỉ nhóm mức chặn. Ngưỡng qua env `SAFETY_WARN_AT` / `SAFETY_KILL_AT`.
 - Chat sau họp khóa vĩnh viễn với meeting flagged (chống stored injection qua summary).
 - Giữ nội dung gốc trong `safety_events`; ẩn danh PII để hướng phát triển.
-- **Còn chờ A1** để biết nhóm nào là "mức chặn".
+- "Mức chặn" theo A1.
 
 ### A3. Triển khai production
 Agent cần process chạy liên tục — Vercel không đáp ứng. Lựa chọn: worker riêng (Railway / Fly / VPS) giữ kết nối agent + guard; hoặc demo đồ án chạy local.

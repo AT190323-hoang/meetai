@@ -42,7 +42,7 @@ flowchart LR
 ### Bước 3 — Xây dựng theo lát cắt (mình làm)
 - Chia thành lát nhỏ chạy được độc lập (ví dụ hôm nay: service gọi Nemotron → guard realtime → lưu DB → chat → hậu kiểm).
 - Mỗi lát: code → type-check + lint → tự chạy thử được gì thì chạy (script, truy vấn DB).
-- Mọi thay đổi trên **một nhánh git riêng** cho chức năng (`feat/<tên>`).
+- Mọi thay đổi trên **một nhánh git riêng** cho chức năng (`feat/<tên>`), tách từ `29-finish` và merge về `29-finish` (xem mục "Quy ước nhánh").
 - Có thể thêm công tắc bật/tắt (như `REALTIME_GUARD=off`) để dễ so sánh và rút lui.
 
 ### Bước 4 — Kiểm thử (bạn + mình) → **điểm chốt: bạn xác nhận**
@@ -57,6 +57,14 @@ flowchart LR
 ### Bước 6 — Commit / PR → **điểm chốt: bạn đồng ý**
 - Mình đề xuất chia commit + nội dung message; chỉ commit/push khi bạn đồng ý.
 - PR vào `main` với mô tả tóm tắt + cách test.
+
+## Quy ước nhánh
+
+- `main`: production. Merge vào `main` là Vercel tự deploy, nên **chỉ merge khi sẵn sàng deploy thật** (sau khi giải quyết A3).
+- `29-finish`: nhánh dev tích hợp. Việc nhỏ (tài liệu, sửa lỗi lặt vặt) làm thẳng ở đây.
+- `feat/<tên>`: chức năng lớn, tách từ `29-finish`, merge về `29-finish` khi xong. Mỗi nhánh push lên có bản Preview riêng trên Vercel để kiểm tra build.
+- Khi `main` có thay đổi (ví dụ bản vá bảo mật) thì merge `main` về `29-finish` sớm để tránh conflict lớn về sau.
+- Làm trên nhiều máy: `git pull` trước khi làm, commit và push khi xong.
 
 ## Cách bạn giao việc
 
@@ -77,4 +85,4 @@ Các câu lệnh điều hướng hữu ích:
 ## Áp dụng ngay cho dự án
 
 - Nhánh hiện tại `29-finish` đang chứa toàn bộ thay đổi hôm nay **chưa commit** → đề xuất commit theo nhóm (guard, sửa lỗi realtime, nâng phụ thuộc, tài liệu) khi bạn đồng ý.
-- Hạn báo cáo đồ án 31/10/2026 → ưu tiên: (1) chốt chính sách phân mức, (2) kill-switch UI, (3) bộ thử nghiệm + số liệu Chương 3, (4) sửa tài liệu đồ án.
+- Chưa có hạn chót cố định (người dùng sẽ báo khi có). Thứ tự ưu tiên hiện tại: (1) chính sách phân mức, (2) kill-switch và cách ly, (3) `vn_policy`, (4) bộ thử nghiệm + số liệu Chương 3, (5) sửa tài liệu đồ án.

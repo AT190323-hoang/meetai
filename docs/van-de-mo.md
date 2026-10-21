@@ -46,7 +46,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 
 - [~] **Chính sách phân mức (A1): đã code trên nhánh `feat/safety-policy` (21/10), chờ test** — chat (test được bằng chữ) và cuộc gọi thật (block / care / log). Chưa merge về `29-finish`.
 - [~] **Kill-switch và cách ly (A5): đã code trên nhánh `feat/kill-switch` (tách từ `feat/safety-policy`, 21/10), chờ test** — giao diện (dùng meeting bị flagged sau test chat) và cuộc gọi thật với `SAFETY_WARN_AT=2`, `SAFETY_KILL_AT=3`. Merge theo thứ tự: `feat/safety-policy` → `29-finish`, rồi `feat/kill-switch` → `29-finish`.
-- [~] **`vn_policy`: khảo sát xong** (`khao-sat/vn-policy.md`, nhánh `feat/vn-policy`), kế hoạch 5 lát đã duyệt 21/10: tách riêng, áp dụng cho cả câu người dùng và câu agent, chỉ dẫn mặc định cho mọi agent (người dùng không tắt được). **Tạm dừng, chưa code.**
+- [~] **`vn_policy`: khảo sát xong** (`khao-sat/vn-policy.md`, nhánh `feat/vn-policy`), kế hoạch 5 lát đã duyệt 21/10: tách riêng, áp dụng cho cả câu người dùng và câu agent, chỉ dẫn mặc định cho mọi agent (người dùng không tắt được). **Đã code 21/10 (detector, áp dụng cho cả 3 điểm kiểm duyệt, chỉ dẫn mặc định), chờ test.**
   - Chờ bàn: **mở rộng nội dung chính sách** (hiện chỉ 4 nhóm). Đề xuất bổ sung: đường chín đoạn, vùng biển/biên giới; xúc phạm quốc kỳ, quốc huy, quốc ca, lãnh tụ, anh hùng dân tộc; phỉ báng chính quyền, chiến tranh tâm lý, ly khai; chia rẽ khối đại đoàn kết; bịa đặt khẳng định như sự thật. Mỗi nhóm cần câu thử và đo lại.
 - [ ] Sau đó: chế độ guard (A2) → thực nghiệm → deploy (A3).
 - [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).

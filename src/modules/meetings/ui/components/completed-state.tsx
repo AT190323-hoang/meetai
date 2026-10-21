@@ -6,6 +6,7 @@ import {
     FileTextIcon,
     BookOpenTextIcon,
     ClockFadingIcon,
+    ShieldAlertIcon,
 } from "lucide-react";
 import MarkDown from "react-markdown";
 import Link from "next/link";
@@ -15,11 +16,23 @@ import { Badge } from "@/components/ui/badge";
 import { formatDuration } from "@/lib/utils";
 import { Transcript } from "./transcript";
 import { ChatProvider } from "./chat-provider";
+import { SafetyEvents } from "./safety-events";
+import { EmptyState } from "@/components/empty-state";
 interface Props {
     data: MeetingGetOne;
 }
 
+const HiddenContent = ({ title, description }: { title: string; description: string }) => (
+    <div className="bg-white rounded-lg border px-4 py-5">
+        <EmptyState title={title} description={description} />
+    </div>
+);
+
 export const CompletedState = ({ data }: Props) => {
+    // The server already withholds quarantined content; these states only explain why it is missing
+    const isFlagged = data.safetyStatus === "flagged";
+    const hiddenDescription = "Acknowledge the safety warning above to view this content.";
+
     return (
         <div className="flex flex-col gap-y-4">
             <Tabs defaultValue="summary">
@@ -58,24 +71,55 @@ export const CompletedState = ({ data }: Props) => {
                                 <BookOpenTextIcon />
                                 Ask AI
                             </TabsTrigger>
+                            {isFlagged && !data.quarantined && (
+                                <TabsTrigger
+                                    value="safety"
+                                    className="text-muted-foreground rounded-none bg-background data-[state=active]:shadow-none border-b-2 border-transparent data-[state=active]:border-b-primary
+                            data-[state=active]:text-accent-foreground h-full hover:text-accent-foreground"
+                                >
+                                    <ShieldAlertIcon />
+                                    Safety
+                                </TabsTrigger>
+                            )}
                         </TabsList>
                     </ScrollArea>
                 </div>
                 <TabsContent value="chat">
-                    <ChatProvider meetingId = {data.id} meetingName= {data.name} />
+                    {isFlagged ? (
+                        // Locked for good, even after acknowledging: the summary in its prompt may carry injected content
+                        <HiddenContent
+                            title="Chat is locked"
+                            description="Chat is not available for meetings flagged by the safety system."
+                        />
+                    ) : (
+                        <ChatProvider meetingId = {data.id} meetingName= {data.name} />
+                    )}
                 </TabsContent>
                 <TabsContent value="transcript">
-                    <Transcript meetingId = {data.id} />
+                    {data.quarantined ? (
+                        <HiddenContent title="Transcript hidden" description={hiddenDescription} />
+                    ) : (
+                        <Transcript meetingId = {data.id} />
+                    )}
                 </TabsContent>
                 <TabsContent value="recording">
-                    <div className="bg-white rounded-lg border px-4 py-5">
-                        <video
-                            src={data.recordingUrl!}
-                            className="w-full rounded-lg"
-                            controls
-                        />
-                    </div>
+                    {data.quarantined ? (
+                        <HiddenContent title="Recording hidden" description={hiddenDescription} />
+                    ) : (
+                        <div className="bg-white rounded-lg border px-4 py-5">
+                            <video
+                                src={data.recordingUrl!}
+                                className="w-full rounded-lg"
+                                controls
+                            />
+                        </div>
+                    )}
                 </TabsContent>
+                {isFlagged && !data.quarantined && (
+                    <TabsContent value="safety">
+                        <SafetyEvents meetingId={data.id} />
+                    </TabsContent>
+                )}
                 <TabsContent value="summary">
                     <div className="bg-white rounded-lg border">
                         <div className="px-4 py-5 gap-y-5 flex flex-col col-span-5">
@@ -106,6 +150,11 @@ export const CompletedState = ({ data }: Props) => {
                                 {data.duration ? formatDuration(data.duration) : "No duration"}
                             </Badge>
                             <div >
+                                {data.quarantined ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        The summary is hidden. {hiddenDescription}
+                                    </p>
+                                ) : (
                                 <MarkDown
                                     components={{
                                         h1: (props) => (
@@ -152,6 +201,7 @@ export const CompletedState = ({ data }: Props) => {
                                 >
                                     {data.summary}
                                 </MarkDown>
+                                )}
                             </div>
                         </div>
                     </div>

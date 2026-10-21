@@ -15,6 +15,7 @@ import { ActiveState } from "../components/active-state";
 import { CancelledState } from "../components/cancelled-state";
 import { ProcessingState } from "../components/processing-state";
 import { CompletedState } from "../components/completed-state";
+import { SafetyBanner } from "../components/safety-banner";
 
 interface Props {
     meetingId: string;
@@ -73,6 +74,7 @@ export const MeetingIdView = ({ meetingId }: Props) => {
                     onEdit={() => setUpdateMeetingDialogOpen(true)}
                     onRemove={handleRemoveMeeting}
                 />
+                {data.safetyStatus === "flagged" && <SafetyBanner data={data} />}
                 {isCancelled && <CancelledState />}
                 {isProcessing && <ProcessingState />}
                 {isCompleted && <CompletedState data= {data}/>}

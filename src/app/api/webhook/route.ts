@@ -116,6 +116,15 @@ export async function POST(req: NextRequest) {
         }
 
         const call = streamVideo.video.call("default", meetingId);
+
+        // Calls created before members were set up lack the agent; the "user" role alone cannot
+        // join arbitrary calls. Best effort: a failure here must not stop the agent from connecting.
+        try {
+            await call.updateCallMembers({ update_members: [{ user_id: existingAgent.id }] });
+        } catch (error) {
+            console.error(`[webhook] failed to add agent ${existingAgent.id} as a member of call ${meetingId}`, error);
+        }
+
         const realtimeClient = await streamVideo.video.connectOpenAi({
             call,
             openAiApiKey: process.env.OPENAI_API_KEY!,
@@ -233,6 +242,13 @@ export async function POST(req: NextRequest) {
 
         if (!existingAgent) {
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+        }
+
+        // Only the meeting owner may talk to the agent about it: anyone else posting into a channel
+        // with this meeting's id would otherwise receive the meeting summary
+        if (userId !== existingAgent.id && userId !== existingMeeting.userId) {
+            console.warn(`[webhook] ignored chat message from non-owner ${userId} in meeting ${channelId}`);
+            return NextResponse.json({ status: "ignored" });
         }
 
         if (userId !== existingAgent.id) {

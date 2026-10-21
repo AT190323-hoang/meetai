@@ -25,14 +25,42 @@ const { summary, transcriptUrl, recordingUrl, ...listColumns } = getTableColumns
 
 export const meetingsRouter = createTRPCRouter({
     generateChatToken: protectedProcedure.mutation(async ({ ctx }) => {
-        const token = streamChat.createToken(ctx.auth.user.id);
+        // Plain "user": the "admin" role could read, write and delete every meeting's chat
         await streamChat.upsertUser({
             id: ctx.auth.user.id,
-            role: "admin",
+            role: "user",
         });
 
-        return token;
+        // Expiring token; the chat client asks for a new one when it runs out
+        const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+        return streamChat.createToken(ctx.auth.user.id, expiresAt);
     }),
+    prepareChatChannel: protectedProcedure
+        .input(z.object({ meetingId: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+            const [existingMeeting] = await db
+                .select()
+                .from(meetings)
+                .where(and(eq(meetings.id, input.meetingId), eq(meetings.userId, ctx.auth.user.id)));
+
+            if (!existingMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+            }
+            if (existingMeeting.safetyStatus === "flagged") {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Chat is locked for this meeting" });
+            }
+
+            // The server creates the channel after the ownership check; the client only watches it
+            const channel = streamChat.channel("messaging", existingMeeting.id, {
+                created_by_id: ctx.auth.user.id,
+                members: [ctx.auth.user.id],
+            });
+            await channel.create();
+            // Channels created by older client code already have the owner; this is a no-op for them
+            await channel.addMembers([ctx.auth.user.id]);
+
+            return { channelId: existingMeeting.id };
+        }),
 
     getTranscript: protectedProcedure
         .input(z.object({ id: z.string() }))
@@ -129,29 +157,38 @@ export const meetingsRouter = createTRPCRouter({
             return transcriptWithSpeakers;
         }),
 
-    generateToken: protectedProcedure.mutation(async ({ ctx }) => {
-        await streamVideo.upsertUsers([
-            {
-                id: ctx.auth.user.id,
-                name: ctx.auth.user.name,
-                role: "admin",
-                image:
-                    ctx.auth.user.image ??
-                    generateAvatarUri({ seed: ctx.auth.user.name, variant: "initials" })
-            },
-        ]);
+    generateToken: protectedProcedure
+        .input(z.object({ meetingId: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+            const [existingMeeting] = await db
+                .select({ id: meetings.id })
+                .from(meetings)
+                .where(and(eq(meetings.id, input.meetingId), eq(meetings.userId, ctx.auth.user.id)));
 
-        const expirationTime = Math.floor(Date.now() / 1000) + 3600;
-        const issuedAt = Math.floor(Date.now() / 1000);
+            if (!existingMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+            }
 
-        const token = streamVideo.generateUserToken({
-            user_id: ctx.auth.user.id,
-            exp: expirationTime,
-            validity_in_seconds: issuedAt,
-        });
+            // Plain "user": the "admin" role could delete calls and recordings of every meeting
+            await streamVideo.upsertUsers([
+                {
+                    id: ctx.auth.user.id,
+                    name: ctx.auth.user.name,
+                    role: "user",
+                    image:
+                        ctx.auth.user.image ??
+                        generateAvatarUri({ seed: ctx.auth.user.name, variant: "initials" })
+                },
+            ]);
 
-        return token;
-    }),
+            // A call token only works for this meeting's call and makes the owner a member of it;
+            // the "user" role itself has no access to arbitrary calls (see docs/safety-guard.md)
+            return streamVideo.generateCallToken({
+                user_id: ctx.auth.user.id,
+                call_cids: [`default:${existingMeeting.id}`],
+                exp: Math.floor(Date.now() / 1000) + 3600,
+            });
+        }),
 
     remove: protectedProcedure
         .input(z.object({ id: z.string() }))
@@ -204,10 +241,48 @@ export const meetingsRouter = createTRPCRouter({
                     userId: ctx.auth.user.id,
                 })
                 .returning();
+            const [existingAgent] = await db
+                .select()
+                .from(agents)
+                .where(eq(agents.id, createdMeeting.agentId));
+
+            if (!existingAgent) {
+                throw new TRPCError({
+                    code: "NOT_FOUND",
+                    message: "Agent not found"
+                });
+            }
+
+            // Both must exist on Stream before they can be added as call members
+            await streamVideo.upsertUsers([
+                {
+                    id: ctx.auth.user.id,
+                    name: ctx.auth.user.name,
+                    role: "user",
+                    image:
+                        ctx.auth.user.image ??
+                        generateAvatarUri({ seed: ctx.auth.user.name, variant: "initials" })
+                },
+                {
+                    id: existingAgent.id,
+                    name: existingAgent.name,
+                    role: "user",
+                    image: generateAvatarUri({
+                        seed: existingAgent.name,
+                        variant: "botttsNeutral",
+                    }),
+                }
+            ]);
+
             const call = streamVideo.video.call("default", createdMeeting.id);
             await call.create({
                 data: {
                     created_by_id: ctx.auth.user.id,
+                    // Access to the call comes from membership, not from the global "user" role
+                    members: [
+                        { user_id: ctx.auth.user.id },
+                        { user_id: existingAgent.id },
+                    ],
                     custom: {
                         meetingId: createdMeeting.id,
                         meetingName: createdMeeting.name
@@ -225,29 +300,6 @@ export const meetingsRouter = createTRPCRouter({
                     },
                 },
             });
-            const [existingAgent] = await db
-                .select()
-                .from(agents)
-                .where(eq(agents.id, createdMeeting.agentId));
-
-            if (!existingAgent) {
-                throw new TRPCError({
-                    code: "NOT_FOUND",
-                    message: "Agent not found"
-                });
-            }
-
-            await streamVideo.upsertUsers([
-                {
-                    id: existingAgent.userId,
-                    name: existingAgent.name,
-                    role: "user",
-                    image: generateAvatarUri({
-                        seed: existingAgent.name,
-                        variant: "botttsNeutral",
-                    }),
-                }
-            ]);
 
             return createdMeeting;
         }),

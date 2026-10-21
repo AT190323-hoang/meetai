@@ -43,6 +43,7 @@ Agent cần process chạy liên tục — Vercel không đáp ứng. Lựa ch�
 
 ## C. Việc cần làm ngay về vận hành
 
+- [ ] **Test lại một cuộc gọi thật** sau khi merge `main` (Next 15.3.8, bản vá CVE) và nâng `@stream-io/node-sdk` 0.7.44 → 0.7.64 ngày 21/10. Build đã qua, nhưng `connectOpenAi` chưa được kiểm tra với bản mới.
 - [ ] **Đổi webhook Stream về Vercel** sau khi test (`https://meetai-pi-nine.vercel.app/api/webhook`).
 - [ ] Bản Vercel đang chạy code cũ có lỗi: `ws` bufferutil, giao thức beta (`session.type`), VAD tắt → agent không nhận instructions. Cần deploy code mới (và vẫn còn vấn đề A3).
 - [x] ~~Commit các thay đổi hiện tại~~ — đã commit 20/10 trên `29-finish` và đã push lên `origin/29-finish` (chưa merge `main` vì merge sẽ tự deploy production trên Vercel). File `.docx`/`.pdf` đồ án được đưa vào `.gitignore` (repo công khai); quản lý phiên bản bằng Google Drive/OneDrive.

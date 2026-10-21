@@ -120,7 +120,8 @@ export async function POST(req: NextRequest) {
         // Calls created before members were set up lack the agent; the "user" role alone cannot
         // join arbitrary calls. Best effort: a failure here must not stop the agent from connecting.
         try {
-            await call.updateCallMembers({ update_members: [{ user_id: existingAgent.id }] });
+            // The role must be explicit: without it the member gets the user's global role, which has no access
+            await call.updateCallMembers({ update_members: [{ user_id: existingAgent.id, role: "call_member" }] });
         } catch (error) {
             console.error(`[webhook] failed to add agent ${existingAgent.id} as a member of call ${meetingId}`, error);
         }

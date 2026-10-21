@@ -280,8 +280,8 @@ export const meetingsRouter = createTRPCRouter({
                     created_by_id: ctx.auth.user.id,
                     // Access to the call comes from membership, not from the global "user" role
                     members: [
-                        { user_id: ctx.auth.user.id },
-                        { user_id: existingAgent.id },
+                        { user_id: ctx.auth.user.id, role: "call_member" },
+                        { user_id: existingAgent.id, role: "call_member" },
                     ],
                     custom: {
                         meetingId: createdMeeting.id,

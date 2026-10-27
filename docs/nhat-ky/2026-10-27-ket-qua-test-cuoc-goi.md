@@ -64,4 +64,4 @@ Nhánh `feat/stream-auth`. Checklist: `kiem-thu/2026-10-21-checklist-test.md`. D
 
 - **Lỗi: mỗi tin nhắn được trả lời 3 lần.** `safety_events` có 3 bộ verdict cho cùng một tin nhắn → webhook `message.new` chạy 3 lần. Handler chờ 4 detector + GPT-4o + kiểm tra câu trả lời (có lúc > 10 s) rồi mới trả HTTP → Stream coi là lỗi và **gửi lại webhook** (tối đa 2 lần). Tin nhắn bị chặn ngay (A5, C4) chỉ trả lời 1 lần vì xử lý nhanh.
 - **Đã sửa:** webhook trả lời Stream ngay, phần trả lời chat chạy sau bằng `after()` (Next 15); thêm chống trùng theo `message.id` (bộ nhớ trong tiến trình — đủ cho dev và EC2 một tiến trình).
-- Nhỏ: câu từ chối `CHAT_REFUSAL` là tiếng Anh trong khi người dùng nói tiếng Việt.
+- Đã đổi các câu trả lời cố định của chat (`CHAT_REFUSAL`, `CHAT_LOCKED`, `CHAT_SUPPORT_REPLY`) sang tiếng Việt (trước là tiếng Anh).

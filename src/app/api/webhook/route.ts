@@ -32,15 +32,16 @@ import { VN_CORRECTION_NOTE, withVnPositionNote } from "@/lib/vn-policy";
 
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+// Fixed replies are in Vietnamese: the product targets Vietnamese users (decision A1)
 const CHAT_REFUSAL =
-    "Sorry, I can't help with that request. Is there anything else about the meeting I can help you with?";
+    "Xin lỗi, mình không thể hỗ trợ yêu cầu này. Bạn cần mình giúp gì khác về cuộc họp không?";
 
 const CHAT_LOCKED =
-    "Chat is locked for this meeting because it was flagged by the safety system.";
+    "Cuộc trò chuyện của meeting này đã bị khóa vì hệ thống an toàn phát hiện nội dung vi phạm.";
 
 // Replaces a generated reply that was flagged as harmful self-harm content
 const CHAT_SUPPORT_REPLY =
-    "I'm really sorry you're going through this. You don't have to face it alone. Please consider reaching out to someone you trust, a doctor or a mental health hotline. I'm here if you want to keep talking.";
+    "Mình rất tiếc khi bạn đang trải qua điều này. Bạn không phải đối mặt với nó một mình. Hãy thử chia sẻ với người bạn tin tưởng, bác sĩ hoặc chuyên gia tâm lý. Mình vẫn ở đây nếu bạn muốn nói tiếp.";
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
     return streamVideo.verifyWebhook(body, signature);

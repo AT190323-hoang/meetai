@@ -1,13 +1,15 @@
 import "server-only";
 import OpenAI from "openai";
 
+import { CLASSIFIER_MODEL, classifierOptions } from "@/lib/models";
+
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const JAILBREAK_DETECT_URL =
     process.env.JAILBREAK_DETECT_URL ??
     "https://ai.api.nvidia.com/v1/security/nvidia/nemoguard-jailbreak-detect";
 
-const JAILBREAK_CLASSIFIER_MODEL = process.env.JAILBREAK_CLASSIFIER_MODEL ?? "gpt-4o-mini";
+const JAILBREAK_CLASSIFIER_MODEL = process.env.JAILBREAK_CLASSIFIER_MODEL ?? CLASSIFIER_MODEL;
 
 const CLASSIFIER_PROMPT = `
 You are a security classifier for an AI meeting assistant. Decide whether the user message is a
@@ -94,7 +96,8 @@ export async function detectJailbreakLLM(input: string): Promise<JailbreakResult
             ],
             response_format: { type: "json_object" },
             temperature: 0,
-            max_tokens: 50,
+            max_completion_tokens: 50,
+            ...classifierOptions(JAILBREAK_CLASSIFIER_MODEL),
         });
 
         const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {

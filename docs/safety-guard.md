@@ -16,8 +16,8 @@ Bảo vệ AI agent khỏi:
 |---|---|---|---|
 | `content_safety` | **Llama-3.1-Nemotron-Safety-Guard-8B-v3** qua API hosted của NVIDIA | Nội dung độc hại theo 23 nhóm S1–S23 | ~0.55–0.75 s (an toàn), ~0.8–1.4 s (vi phạm) |
 | `jailbreak_nemoguard` | **NemoGuard JailbreakDetect** (NVIDIA) | Jailbreak | ~0.37–0.57 s |
-| `jailbreak_llm` | **gpt-4o-mini** với prompt phân loại riêng | Jailbreak / prompt injection, kể cả tiếng Việt và câu ngắn | ~0.6–1.5 s |
-| `vn_policy` | **gpt-4o-mini** với chính sách nội dung Việt Nam (`src/lib/vn-policy.ts`) | Xuyên tạc chủ quyền, lịch sử; kích động chống Nhà nước; bôi nhọ lãnh đạo, cơ quan nhà nước. Tin đồn chưa kiểm chứng → `unverified` (chỉ ghi nhận) | p50 1,1 s, p90 1,3 s ([khảo sát](khao-sat/vn-policy.md)) |
+| `jailbreak_llm` | **gpt-5.6-luna** (tắt suy luận; trước 28/10 là gpt-4o-mini) với prompt phân loại riêng | Jailbreak / prompt injection, kể cả tiếng Việt và câu ngắn | ~0.6–1.5 s |
+| `vn_policy` | **gpt-5.6-luna** (tắt suy luận; trước 28/10 là gpt-4o-mini) với chính sách nội dung Việt Nam (`src/lib/vn-policy.ts`) | Xuyên tạc chủ quyền, lịch sử; kích động chống Nhà nước; bôi nhọ lãnh đạo, cơ quan nhà nước. Tin đồn chưa kiểm chứng → `unverified` (chỉ ghi nhận) | p50 1,1 s, p90 1,3 s ([khảo sát](khao-sat/vn-policy.md)) |
 
 Bốn detector chạy **song song** cho mỗi câu của người dùng (`checkUserInput`) → độ trễ tổng ≈ detector chậm nhất. Câu trả lời của agent qua `content_safety` (theo cặp) và `vn_policy` (`checkAgentReply`); jailbreak chỉ đến từ phía người dùng.
 
@@ -25,7 +25,7 @@ Bốn detector chạy **song song** cho mỗi câu của người dùng (`checkU
 - Nemotron đánh giá chính trị theo chuẩn chung, không biết lập trường Việt Nam (S18, S19 để mức `log`), nên cần detector riêng. Tách riêng thay vì gộp vào `jailbreak_llm`: gộp làm hai nhiệm vụ ảnh hưởng lẫn nhau (17/18 so với 18/18), chỉ nhanh hơn ~0,1 s.
 - Câu agent **chỉ** vi phạm `vn_policy` thì được sửa thay vì từ chối: trong cuộc gọi agent bị cắt lời rồi nói lại theo `VN_CORRECTION_NOTE`; trong chat câu trả lời được tạo lại một lần và kiểm lại, vẫn vi phạm thì `CHAT_REFUSAL`.
 - **Chỉ dẫn mặc định** `VN_POSITION_NOTE` được hệ thống thêm vào instructions của mọi agent (cuộc gọi và chat); người dùng không tắt được. `AGENT_VN_POSITION=off` chỉ để người vận hành chạy thực nghiệm có/không có chỉ dẫn.
-- Nội dung chính sách hiện có 4 nhóm; mở rộng (đường chín đoạn, biểu tượng quốc gia, ly khai…) đang chờ bàn (`van-de-mo.md`). Đổi prompt thì chạy lại `scripts/thuc-nghiem/vn-policy-survey.mjs`.
+- Nội dung chính sách hiện có 4 nhóm; mở rộng (đường chín đoạn, biểu tượng quốc gia, ly khai…) đang chờ bàn (`van-de-mo.md`). Đổi prompt hoặc model thì chạy lại `scripts/thuc-nghiem/classifier-model-compare.mjs`.
 
 ### Vì sao cần ba detector — kết quả khảo sát
 
@@ -159,8 +159,8 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 | `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Endpoint Nemotron |
 | `NEMOTRON_MODEL` | `nvidia/llama-3.1-nemotron-safety-guard-8b-v3` | Model id |
 | `JAILBREAK_DETECT_URL` | `https://ai.api.nvidia.com/v1/security/nvidia/nemoguard-jailbreak-detect` | Endpoint NemoGuard |
-| `JAILBREAK_CLASSIFIER_MODEL` | `gpt-4o-mini` | Model phân loại jailbreak |
-| `VN_POLICY_MODEL` | `gpt-4o-mini` | Model của `vn_policy` |
+| `JAILBREAK_CLASSIFIER_MODEL` | `gpt-5.6-luna` (`CLASSIFIER_MODEL`) | Model phân loại jailbreak |
+| `VN_POLICY_MODEL` | `gpt-5.6-luna` (`CLASSIFIER_MODEL`) | Model của `vn_policy` |
 | `AGENT_VN_POSITION` | (bật) | `off` bỏ chỉ dẫn lập trường Việt Nam khỏi instructions, chỉ dùng cho thực nghiệm |
 | `SAFETY_WARN_AT` | `5` | Lượt bị chặn thứ mấy thì cảnh báo |
 | `SAFETY_KILL_AT` | `10` | Lượt bị chặn thứ mấy thì kill-switch (cảnh báo lần cuối ở lượt trước đó). Hạ thấp khi demo |

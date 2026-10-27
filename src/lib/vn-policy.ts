@@ -1,9 +1,11 @@
 import "server-only";
 import OpenAI from "openai";
 
+import { CLASSIFIER_MODEL, classifierOptions } from "@/lib/models";
+
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const VN_POLICY_MODEL = process.env.VN_POLICY_MODEL ?? "gpt-4o-mini";
+const VN_POLICY_MODEL = process.env.VN_POLICY_MODEL ?? CLASSIFIER_MODEL;
 
 // Policy text measured in docs/khao-sat/vn-policy.md (18/18 user, 5/5 agent); re-run
 // scripts/thuc-nghiem/vn-policy-survey.mjs after changing it
@@ -92,7 +94,8 @@ export async function detectVnPolicy(message: string, query?: string): Promise<V
             ],
             response_format: { type: "json_object" },
             temperature: 0,
-            max_tokens: 60,
+            max_completion_tokens: 60,
+            ...classifierOptions(VN_POLICY_MODEL),
         });
 
         const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {

@@ -10,3 +10,14 @@ export const CHAT_REASONING_EFFORT = "low" as const;
 
 /** Meeting summary (runs in the background, so the default reasoning effort is kept) */
 export const SUMMARY_MODEL = process.env.SUMMARY_MODEL ?? "gpt-6.1-terra";
+
+/**
+ * jailbreak_llm and vn_policy. gpt-5.6-luna matched gpt-4o-mini's accuracy on every test case and was
+ * the fastest replacement that did (scripts/thuc-nghiem/classifier-model-compare.mjs); their latency
+ * bounds the realtime guard, so reasoning is off.
+ */
+export const CLASSIFIER_MODEL = "gpt-5.6-luna";
+
+/** Request options for a classifier model: reasoning models need it turned off to stay fast. */
+export const classifierOptions = (model: string) =>
+    model.startsWith("gpt-4") ? {} : { reasoning_effort: "none" as const };

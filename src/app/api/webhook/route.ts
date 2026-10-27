@@ -18,6 +18,7 @@ import { ChatCompletionMessageParam } from "openai/resources/index.mjs"
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
 import { attachRealtimeGuard } from "@/lib/realtime-guard";
+import { CHAT_MODEL, CHAT_REASONING_EFFORT, REALTIME_MODEL } from "@/lib/models";
 import {
     checkAgentReply,
     checkUserInput,
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
             call,
             openAiApiKey: process.env.OPENAI_API_KEY!,
             agentUserId: existingAgent.id,
+            model: REALTIME_MODEL,
         });
 
         // REALTIME_GUARD=off runs the agent without the guard (baseline for comparisons)
@@ -367,7 +369,8 @@ export async function POST(req: NextRequest) {
                                     ...previousMessages,
                                     { role: "user", content: text },
                                 ],
-                                model: "gpt-4o",
+                                model: CHAT_MODEL,
+                                reasoning_effort: CHAT_REASONING_EFFORT,
                             });
                             return GPTResponse.choices[0].message.content;
                         };

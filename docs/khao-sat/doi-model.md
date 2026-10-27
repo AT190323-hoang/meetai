@@ -1,6 +1,6 @@
 # Khảo sát: nâng cấp model OpenAI
 
-> Ngày: 28/10/2026. Trạng thái: **khảo sát xong, chờ duyệt kế hoạch**. Nguồn: trang pricing và deprecations chính thức của OpenAI (đọc 28/10/2026).
+> Ngày: 28/10/2026. Trạng thái: **kế hoạch duyệt 28/10; bước 2 đã code trên `feat/model-upgrade`, chờ test**. Nguồn: trang pricing và deprecations chính thức của OpenAI (đọc 28/10/2026).
 
 ## 1. Đang dùng gì, khi nào bị tắt
 
@@ -71,3 +71,15 @@ Nên để tên model trong biến môi trường (như `VN_POLICY_MODEL` đang 
 2. Agent cuộc gọi → `gpt-realtime-2.1`; chat + tóm tắt → `gpt-6.1-terra` (kèm tóm tắt tiếng Việt). Test bằng cuộc gọi và chat.
 3. Bộ phân loại → `gpt-6-luna`: đo lại độ chính xác và độ trễ, **gộp chung với khảo sát strict mode (A2)** vì cùng phụ thuộc độ trễ.
 4. (Thực nghiệm Chương 3) so sánh `gpt-realtime-2.1` với `-mini` về chi phí, độ trễ, chất lượng.
+
+## 6. Tiến độ
+
+**Bước 1 (28/10):** đã gộp 4 nhánh vào `29-finish`, tách `feat/model-upgrade`.
+
+**Bước 2 (28/10, chờ test):** tên model gom vào `src/lib/models.ts` (ghi đè bằng env).
+- Kiểm tra tài khoản: `gpt-realtime-2.1`, `gpt-realtime-2.1-mini`, `gpt-6.1-terra`, `gpt-6-luna` đều dùng được.
+- Agent cuộc gọi: `connectOpenAi({ model: REALTIME_MODEL })`. Chưa đặt reasoning cho realtime (để mặc định); đo độ trễ khi test.
+- Chat: `gpt-6.1-terra`, `reasoning_effort: "low"`. Thử một câu: `low` 3,0 s, `none` 2,4 s; chọn `low` vì chat đã chạy nền sau khi trả lời webhook.
+- Tóm tắt: `gpt-6.1-terra`, prompt yêu cầu viết tiếng Việt và suy ra từ bị chép sai. Chạy thử trên transcript `nilQr…`: 8,8 s, 1.817 token vào / 629 ra; summary tiếng Việt đúng nội dung, tự hiểu "Tick Fun" là tích phân, ghi nhận đúng các đoạn từ chối và lập trường chủ quyền.
+
+**Bước 3:** bộ phân loại → `gpt-6-luna` (chưa làm, gộp với khảo sát A2).

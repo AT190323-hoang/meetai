@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Meet.AI: a Next.js 15 (App Router) app where users create AI "agents" (a name plus system instructions) and run video meetings with them. An OpenAI Realtime agent joins the Stream Video call. After the call ends, the transcript is summarized by GPT-4o in the background, and users can chat with the agent about the meeting. Free-tier limits and subscriptions go through Polar.
+Meet.AI: a Next.js 15 (App Router) app where users create AI "agents" (a name plus system instructions) and run video meetings with them. An OpenAI Realtime agent (`gpt-realtime-2.1`) joins the Stream Video call. After the call ends, the transcript is summarized in Vietnamese by `gpt-6.1-terra` in the background, and users can chat with the agent about the meeting. Free-tier limits and subscriptions go through Polar.
 
 ## Project context and working agreement
 
@@ -32,7 +32,7 @@ npx inngest-cli dev  # Inngest dev server (not in package.json); needed for post
 
 There is no test framework and there are no tests.
 
-Required env vars (`.env`): `DATABASE_URL` (Neon Postgres), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GITHUB_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_STREAM_VIDEO_API_KEY`, `STREAM_VIDEO_SECRET_KEY`, `NEXT_PUBLIC_STREAM_CHAT_API_KEY`, `STREAM_CHAT_SECRET_KEY`, `OPENAI_API_KEY`, `POLAR_ACCESS_TOKEN`, `NVIDIA_API_KEY` (optional overrides: `NVIDIA_BASE_URL`, `NEMOTRON_MODEL`).
+Required env vars (`.env`): `DATABASE_URL` (Neon Postgres), `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GITHUB_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_STREAM_VIDEO_API_KEY`, `STREAM_VIDEO_SECRET_KEY`, `NEXT_PUBLIC_STREAM_CHAT_API_KEY`, `STREAM_CHAT_SECRET_KEY`, `OPENAI_API_KEY`, `POLAR_ACCESS_TOKEN`, `NVIDIA_API_KEY` (optional overrides: `NVIDIA_BASE_URL`, `NEMOTRON_MODEL`, and the OpenAI models in `src/lib/models.ts`: `REALTIME_MODEL`, `CHAT_MODEL`, `SUMMARY_MODEL`, plus `JAILBREAK_CLASSIFIER_MODEL`, `VN_POLICY_MODEL`). Every OpenAI model the app used until 10/2026 (gpt-realtime, gpt-4o, gpt-4o-mini) is shut down in January 2027; see `docs/khao-sat/doi-model.md`.
 
 ## Architecture
 
@@ -71,7 +71,7 @@ Meeting `status` enum: `upcoming → active → processing → completed` (or `c
    - `call.recording_ready`: saves `recordingUrl`
    - `message.new` (Stream Chat, channel id = meeting id, completed meetings only): replies as the agent using OpenAI with the meeting summary and recent messages as context
 4. `src/inngest/functions.ts` (served at `/api/inngest`): two functions listen to `meetings/processing`:
-   - `meetingsProcessing` fetches the JSONL transcript, maps `speaker_id` to user and agent names, summarizes with `@inngest/agent-kit` (gpt-4o), saves `summary`, and sets status to `completed`.
+   - `meetingsProcessing` fetches the JSONL transcript, maps `speaker_id` to user and agent names, summarizes with `@inngest/agent-kit` (`SUMMARY_MODEL`; Stream's transcript is an English translation because Stream has no Vietnamese, so the prompt asks for a Vietnamese summary and to infer mistranscribed words), skips empty transcripts, saves `summary`, and sets status to `completed`.
    - `meetingsSafetyAudit` pairs user and agent turns, classifies them with Nemotron, and sets `meetings.safetyStatus` to `safe` unless it is already `flagged`.
 
 ### Safety guard (NVIDIA Nemotron)

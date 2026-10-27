@@ -95,6 +95,17 @@ export const meetingsProcessing = inngest.createFunction(
       })
     });
 
+    // Nothing was said: asking the model anyway stores its apology as the summary
+    if (transcriptWithSpeakers.length === 0) {
+      await step.run("save-empty-summary", async () => {
+        await db
+          .update(meetings)
+          .set({ summary: null, status: "completed" })
+          .where(eq(meetings.id, event.data.meetingId))
+      })
+      return;
+    }
+
     const { output } = await summerizer.run(
       "Summarize the following transcript: " +
       JSON.stringify(transcriptWithSpeakers)

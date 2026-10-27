@@ -1,4 +1,4 @@
-import { and, eq, not } from "drizzle-orm";
+import { and, eq, isNull, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import {
     MessageNewEvent,
@@ -188,16 +188,19 @@ export async function POST(req: NextRequest) {
         const event = payload as CallTranscriptionReadyEvent;
         const meetingId = event.call_cid.split(":")[1];
 
+        // Only the first transcription counts: a stray session after the call ended (seen right
+        // after the kill-switch) produces an empty one that would overwrite the real transcript
         const [updatedMeeting] = await db
             .update(meetings)
             .set({
                 transcriptUrl: event.call_transcription.url,
             })
-            .where(eq(meetings.id, meetingId))
+            .where(and(eq(meetings.id, meetingId), isNull(meetings.transcriptUrl)))
             .returning();
 
         if (!updatedMeeting) {
-            return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+            console.log(`[webhook] ignored transcription ${event.call_transcription.filename} for meeting ${meetingId}: not found or already transcribed`);
+            return NextResponse.json({ status: "ignored" });
         }
 
         await inngest.send({

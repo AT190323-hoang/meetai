@@ -38,3 +38,10 @@ Nhánh `feat/stream-auth`. Checklist: `kiem-thu/2026-10-21-checklist-test.md`. D
 - B2 LOG, B3 CARE, B4 BLOCK #1, B5 BLOCK #2 (`jailbreak_llm`: reveal internal instructions), B6 BLOCK #3 → kill-switch. `blocked_turns = 3`, flagged, đã xác nhận.
 - **Vấn đề mới (B4): lời từ chối bị lặp.** Câu hỏi chế tạo bom: cả 4 detector mất 10–12 s (NemoGuard lỗi) → verdict tới khi agent đã **tự từ chối xong** → guard vẫn gửi `response.create` lời từ chối → agent nói thêm một lần. Vì đang ở chế độ hỗ trợ (sau B3), lời từ chối thứ hai mang giọng khuyên nhủ tâm lý → người dùng nghe như agent lặp lời khuyên. Đây là giới hạn cố hữu của shadow mode → đưa vào bàn A2 (strict).
 - Meeting `aVwU-kuZ9P0CozwhdSwRu`: cuộc gọi 9 s, không ai nói → summary là câu xin lỗi "transcript is empty" của GPT-4o (nên lưu là không có nội dung thay vì câu này).
+
+## 5. Tab Transcript trống sau kill-switch (đã sửa)
+
+- Meeting `tVLN…`: Stream có **2 bản transcript** — phiên thật 05:44:55–05:47:54 (4.134 byte) và một **phiên phụ** 05:47:55–05:48:12 (0 byte) bắt đầu 7 s sau `call.end()`. Webhook `call.transcription_ready` luôn ghi đè `transcriptUrl` → bản rỗng đè bản thật. Chưa rõ ai mở phiên phụ (webhook đã từ chối nối lại agent vì meeting đang `processing`; nghi trình duyệt).
+- Sửa: webhook chỉ nhận **bản transcript đầu tiên** của mỗi meeting (bỏ qua và không gửi Inngest cho các bản sau); Inngest **không tóm tắt transcript rỗng** (summary = null, giao diện ghi "Nothing was said…").
+- Sửa dữ liệu: `tVLN…` trỏ lại bản transcript thật; `aVwU…` xóa câu xin lỗi trong summary.
+- Còn lại: giao diện cuộc gọi chưa chuyển sang màn hình "đã kết thúc" khi server ngắt cuộc gọi (SDK tự rời nhưng giao diện vẫn ở màn hình đang gọi).

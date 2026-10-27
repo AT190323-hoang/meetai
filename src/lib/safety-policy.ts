@@ -97,11 +97,31 @@ export function shouldFlagMeeting(severity: Severity | null, role: "user" | "age
     return severity === "block" || (severity === "care" && role === "agent");
 }
 
+/**
+ * Kill-switch thresholds on blocked user turns (decision A5): warn at SAFETY_WARN_AT, final
+ * warning one turn before SAFETY_KILL_AT, end the call at SAFETY_KILL_AT. Lower them for demos.
+ */
+export const SAFETY_WARN_AT = Number(process.env.SAFETY_WARN_AT ?? 5);
+export const SAFETY_KILL_AT = Number(process.env.SAFETY_KILL_AT ?? 10);
+
 /** Appended to the agent's own instructions, so it keeps its persona and language. */
 export const REFUSAL_NOTE = `
 The user's last message, or your previous reply, was flagged by the safety system.
 Briefly and politely say you cannot help with that request, then offer to continue with
 another topic. Do not repeat or explain the unsafe content.
+`.trim();
+
+export const WARNING_NOTE = `
+Also clearly warn the user that if they keep making requests like this, the conversation will be ended.
+`.trim();
+
+export const FINAL_WARNING_NOTE = `
+Also clearly warn the user that this is the final warning: one more request like this and the conversation will be ended.
+`.trim();
+
+export const KILL_NOTE = `
+The user has repeatedly violated the safety rules. In one or two short sentences, tell the user that the
+conversation is being ended for this reason, then stop. Do not answer anything else.
 `.trim();
 
 /** Enabled once per session after the first self-harm signal. */

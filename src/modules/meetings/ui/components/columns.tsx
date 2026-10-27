@@ -11,6 +11,7 @@ import {
     ClockFadingIcon,
     CornerDownRightIcon,
     LoaderIcon,
+    ShieldAlertIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatDuration } from "@/lib/utils";
@@ -69,6 +70,7 @@ export const columns: ColumnDef<MeetingGetMany[number]>[] = [
             const Icon = statusIconMap[row.original.status as keyof typeof statusIconMap];
        
        return (
+        <div className="flex items-center gap-x-2">
         <Badge
         variant = "outline"
         className={cn(
@@ -76,13 +78,23 @@ export const columns: ColumnDef<MeetingGetMany[number]>[] = [
             statusColorMap[row.original.status as keyof typeof statusColorMap]
         )}
         >
-            <Icon  
+            <Icon
             className={cn(
                 row.original.status === "processing" &&  "animate-spin"
             )}
             />
             {row.original.status}
         </Badge>
+        {row.original.safetyStatus === "flagged" && (
+            <Badge
+            variant="outline"
+            className="capitalize [&>svg]:size-4 bg-rose-500/20 text-rose-800 border-rose-800/5"
+            >
+                <ShieldAlertIcon />
+                flagged
+            </Badge>
+        )}
+        </div>
        )
         },
     },

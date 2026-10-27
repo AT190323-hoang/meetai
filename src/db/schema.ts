@@ -92,6 +92,10 @@ export const meetings = pgTable("meetings", {
   recordingUrl: text("recording_url"),
   summary: text("summary"),
   safetyStatus: safetyStatus("safety_status").notNull().default("pending"),
+  // User turns blocked by the realtime guard; persisted so rejoining the call does not reset the kill-switch
+  blockedTurns: integer("blocked_turns").notNull().default(0),
+  // When the owner acknowledged the safety warning and lifted the quarantine for themselves
+  safetyAcknowledgedAt: timestamp("safety_acknowledged_at"),
   createAt: timestamp("created_at").notNull().defaultNow(),
   updateAt: timestamp("updated_at").notNull().defaultNow(),
 });

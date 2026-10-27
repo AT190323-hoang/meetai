@@ -78,6 +78,8 @@ Unsafe verdicts are mapped to a policy tier by `src/lib/safety-policy.ts` (decis
 
 Every verdict (realtime, chat, post-call) goes through `recordSafetyEvent` (`src/lib/safety-events.ts`). It writes a row to `safety_events` with its `severity` and sets `meetings.safetyStatus` to `flagged` per `shouldFlagMeeting`. `checkSafety` fails open: if the API errors, the content is treated as safe and the `error` column is filled in. The chat handler in the webhook blocks before and after GPT by tier (`CHAT_REFUSAL`, or supportive guidance / `CHAT_SUPPORT_REPLY` for `care`).
 
+Kill-switch and quarantine (decision A5): blocked user turns are counted in `meetings.blocked_turns`; at `SAFETY_WARN_AT` (5) the refusal warns, one turn before `SAFETY_KILL_AT` (10) it warns finally, at `SAFETY_KILL_AT` the agent says a closing line and `call.end()` ends the call. A flagged meeting is quarantined until the owner calls `meetings.acknowledgeSafety`: `getOne` blanks summary/transcript/recording and returns `quarantined` + `flaggedBy`, `getTranscript`/`getSafetyEvents` are forbidden, `getMany` never returns content. Chat for flagged meetings is locked for good (`CHAT_LOCKED`), because the summary in its prompt may carry injected content.
+
 Running the full flow locally requires the ngrok tunnel (Stream must be configured to send webhooks to it) and the Inngest dev server.
 
 ### Project docs

@@ -33,6 +33,9 @@ const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 const CHAT_REFUSAL =
     "Sorry, I can't help with that request. Is there anything else about the meeting I can help you with?";
 
+const CHAT_LOCKED =
+    "Chat is locked for this meeting because it was flagged by the safety system.";
+
 // Replaces a generated reply that was flagged as harmful self-harm content
 const CHAT_SUPPORT_REPLY =
     "I'm really sorry you're going through this. You don't have to face it alone. Please consider reaching out to someone you trust, a doctor or a mental health hotline. I'm here if you want to keep talking.";
@@ -129,7 +132,12 @@ export async function POST(req: NextRequest) {
         });
 
         if (guardEnabled) {
-            attachRealtimeGuard(realtimeClient, { meetingId, instructions: existingAgent.instructions });
+            attachRealtimeGuard(realtimeClient, {
+                meetingId,
+                instructions: existingAgent.instructions,
+                // Kill-switch: ends the call for every participant
+                endCall: () => call.end(),
+            });
         }
     } else if (eventType === "call.session_participant_left") {
         const event = payload as CallSessionParticipantLeftEvent;
@@ -246,6 +254,34 @@ export async function POST(req: NextRequest) {
             const channel = streamChat.channel("messaging", channelId);
             await channel.watch();
 
+            const replyAsAgent = async (replyText: string) => {
+                const avatarUrl = generateAvatarUri({
+                    seed: existingAgent.name,
+                    variant: "botttsNeutral",
+                });
+
+                await streamChat.upsertUser({
+                    id: existingAgent.id,
+                    name: existingAgent.name,
+                    image: avatarUrl,
+                });
+
+                await channel.sendMessage({
+                    text: replyText,
+                    user: {
+                        id: existingAgent.id,
+                        name: existingAgent.name,
+                        image: avatarUrl,
+                    }
+                });
+            };
+
+            // Quarantined meetings never reach GPT: the summary may carry content injected during the call (A5)
+            if (existingMeeting.safetyStatus === "flagged") {
+                await replyAsAgent(CHAT_LOCKED);
+                return NextResponse.json({ status: "ok" });
+            }
+
             const previousMessages = channel.state.messages
                 .slice(-5)
                 .filter((msg) => msg.text && msg.text.trim() !== "")
@@ -301,25 +337,7 @@ export async function POST(req: NextRequest) {
                     GPTResponseText = CHAT_SUPPORT_REPLY;
                 }
             }
-            const avatarUrl = generateAvatarUri({
-                seed: existingAgent.name,
-                variant: "botttsNeutral",
-            });
-
-            streamChat.upsertUser({
-                id: existingAgent.id,
-                name: existingAgent.name,
-                image: avatarUrl,
-            })
-
-            channel.sendMessage({
-                text: GPTResponseText,
-                user: {
-                    id: existingAgent.id,
-                    name: existingAgent.name,
-                    image: avatarUrl,
-                }
-            })
+            await replyAsAgent(GPTResponseText);
         }
     }
 

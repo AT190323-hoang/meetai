@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetings, safetyEvents } from "@/db/schema";
@@ -128,6 +128,41 @@ export async function hasCareSignal(meetingId: string) {
     } catch (error) {
         console.error(`[safety] failed to read care signal for meeting ${meetingId}`, error);
         return false;
+    }
+}
+
+/**
+ * Who caused a meeting's flag: the user (any blocked user turn) or otherwise the agent. The UI
+ * words the warning differently, since an agent-caused flag is not the user's violation.
+ */
+export async function getFlagCause(meetingId: string): Promise<"user" | "agent"> {
+    const [userBlock] = await db
+        .select({ id: safetyEvents.id })
+        .from(safetyEvents)
+        .where(and(
+            eq(safetyEvents.meetingId, meetingId),
+            eq(safetyEvents.role, "user"),
+            eq(safetyEvents.severity, "block"),
+        ))
+        .limit(1);
+    return userBlock ? "user" : "agent";
+}
+
+/**
+ * Atomically counts a blocked user turn and returns the new total, or null when the write fails
+ * (the caller then falls back to its in-memory count).
+ */
+export async function incrementBlockedTurns(meetingId: string) {
+    try {
+        const [row] = await db
+            .update(meetings)
+            .set({ blockedTurns: sql`${meetings.blockedTurns} + 1` })
+            .where(eq(meetings.id, meetingId))
+            .returning({ blockedTurns: meetings.blockedTurns });
+        return row?.blockedTurns ?? null;
+    } catch (error) {
+        console.error(`[safety] failed to count blocked turn for meeting ${meetingId}`, error);
+        return null;
     }
 }
 

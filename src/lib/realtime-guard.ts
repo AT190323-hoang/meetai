@@ -3,12 +3,29 @@ import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 
 import { checkSafety, type SafetyResult } from "@/lib/nemotron";
 import type { JailbreakResult } from "@/lib/jailbreak";
-import { checkUserInput, recordSafetyEvent, recordUserInputEvents, severityOf } from "@/lib/safety-events";
-import { REFUSAL_NOTE, SUPPORT_NOTE, SUPPORT_RETRY_NOTE } from "@/lib/safety-policy";
+import {
+    checkUserInput,
+    incrementBlockedTurns,
+    recordSafetyEvent,
+    recordUserInputEvents,
+    severityOf,
+} from "@/lib/safety-events";
+import {
+    FINAL_WARNING_NOTE,
+    KILL_NOTE,
+    REFUSAL_NOTE,
+    SAFETY_KILL_AT,
+    SAFETY_WARN_AT,
+    SUPPORT_NOTE,
+    SUPPORT_RETRY_NOTE,
+    WARNING_NOTE,
+} from "@/lib/safety-policy";
 
 // Sentence boundaries used to chunk the agent transcript (also covers Vietnamese punctuation usage)
 const SENTENCE_END = /[.!?…]\s*$/;
 const MIN_CHUNK_LENGTH = 40;
+// The call is ended after the closing line is spoken, or after this long if it never completes
+const KILL_FALLBACK_MS = 15_000;
 
 interface ResponseState {
     text: string;
@@ -17,6 +34,8 @@ interface ResponseState {
     active: boolean;
     transcriptDone: boolean;
     isRefusal: boolean;
+    // The kill-switch closing line; the call ends when it is done
+    isClosing: boolean;
 }
 
 /**
@@ -24,10 +43,15 @@ interface ResponseState {
  * Nemotron in parallel with the conversation (no added latency). Verdicts are acted on by
  * policy tier (src/lib/safety-policy.ts): "block" cancels the in-flight response and makes the
  * agent refuse, "care" switches the session to a supportive mode once, "log" only records.
+ * Blocked user turns escalate: a warning, a final warning, then the kill-switch ends the call.
  */
 export function attachRealtimeGuard(
     client: RealtimeClient,
-    { meetingId, instructions }: { meetingId: string; instructions: string }
+    {
+        meetingId,
+        instructions,
+        endCall,
+    }: { meetingId: string; instructions: string; endCall: () => Promise<unknown> }
 ) {
     const responses = new Map<string, ResponseState>();
     let activeResponseId: string | null = null;
@@ -38,6 +62,10 @@ export function attachRealtimeGuard(
     let sessionInstructions = instructions;
     let refusalNote = REFUSAL_NOTE;
     let supportMode = false;
+    // Fallback count when the DB write fails; the DB total survives guard restarts
+    let blockedTurns = 0;
+    let killed = false;
+    let callEnded = false;
 
     const log = (message: string, results: (SafetyResult | JailbreakResult)[] = []) => {
         const details = results
@@ -70,7 +98,8 @@ export function attachRealtimeGuard(
     // - never send `response.create` while a response is still active (cancel is async and
     //   only completes on `response.done`), so the refusal is queued until then
     const refuse = (note: string) => {
-        if (pendingRefusal || refusalQueued) {
+        // After the kill-switch only the closing line may be spoken
+        if (pendingRefusal || refusalQueued || (killed && note !== KILL_NOTE)) {
             return;
         }
         refusalNote = note;
@@ -95,6 +124,37 @@ export function attachRealtimeGuard(
         log("support mode enabled");
     };
 
+    const endCallOnce = () => {
+        if (callEnded) {
+            return;
+        }
+        callEnded = true;
+        log("kill-switch: ending the call");
+        endCall().catch((error) => log(`kill-switch: failed to end the call: ${error}`));
+    };
+
+    // The agent says a closing line first; the call ends on that response's `response.done`
+    const kill = () => {
+        killed = true;
+        if (refusalQueued) {
+            // The queued refusal reads the note when it is sent, so it becomes the closing line
+            refusalNote = KILL_NOTE;
+        } else if (!pendingRefusal) {
+            refuse(KILL_NOTE);
+        }
+        setTimeout(endCallOnce, KILL_FALLBACK_MS);
+    };
+
+    const noteForBlockedTurn = (count: number) => {
+        if (count === SAFETY_KILL_AT - 1) {
+            return `${REFUSAL_NOTE}\n${FINAL_WARNING_NOTE}`;
+        }
+        if (count === SAFETY_WARN_AT) {
+            return `${REFUSAL_NOTE}\n${WARNING_NOTE}`;
+        }
+        return REFUSAL_NOTE;
+    };
+
     on("server.error", (event: { error: unknown }) => {
         log(`OpenAI realtime error (Stream wrapper disconnects on this): ${JSON.stringify(event.error)}`);
     });
@@ -112,6 +172,7 @@ export function attachRealtimeGuard(
             active: true,
             transcriptDone: false,
             isRefusal: pendingRefusal,
+            isClosing: killed && pendingRefusal,
         });
         pendingRefusal = false;
     });
@@ -132,6 +193,9 @@ export function attachRealtimeGuard(
             if (refusalQueued && !activeResponseId) {
                 refusalQueued = false;
                 sendRefusal();
+            }
+            if (state?.isClosing) {
+                endCallOnce();
             }
         }
     );
@@ -165,8 +229,23 @@ export function attachRealtimeGuard(
                 return;
             }
 
-            log(`user turn BLOCK (agent responding: ${activeResponseId !== null}) "${transcript}"`, results);
-            refuse(REFUSAL_NOTE);
+            if (killed) {
+                log(`user turn BLOCK after kill-switch, ignored "${transcript}"`, results);
+                return;
+            }
+
+            // Counted per user turn, not per detector (decision A5)
+            blockedTurns = (await incrementBlockedTurns(meetingId)) ?? blockedTurns + 1;
+            log(
+                `user turn BLOCK #${blockedTurns}/${SAFETY_KILL_AT} (agent responding: ${activeResponseId !== null}) "${transcript}"`,
+                results
+            );
+
+            if (blockedTurns >= SAFETY_KILL_AT) {
+                kill();
+                return;
+            }
+            refuse(noteForBlockedTurn(blockedTurns));
         }
     );
 

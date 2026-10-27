@@ -18,15 +18,17 @@ import { ChatCompletionMessageParam } from "openai/resources/index.mjs"
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
 import { attachRealtimeGuard } from "@/lib/realtime-guard";
-import { checkSafety } from "@/lib/nemotron";
 import {
+    checkAgentReply,
     checkUserInput,
     hasCareSignal,
+    isVnPolicyResult,
     recordSafetyEvent,
     recordUserInputEvents,
     severityOf,
 } from "@/lib/safety-events";
 import { SUPPORT_NOTE } from "@/lib/safety-policy";
+import { VN_CORRECTION_NOTE, withVnPositionNote } from "@/lib/vn-policy";
 
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -122,9 +124,11 @@ export async function POST(req: NextRequest) {
 
         // REALTIME_GUARD=off runs the agent without the guard (baseline for comparisons)
         const guardEnabled = process.env.REALTIME_GUARD !== "off";
+        // System-level guidance every agent gets; users cannot remove it
+        const instructions = withVnPositionNote(existingAgent.instructions);
 
         realtimeClient.updateSession({
-            instructions: existingAgent.instructions,
+            instructions,
             // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies
             turn_detection: { type: "server_vad" },
             // User transcripts are required by the Nemotron realtime guard
@@ -134,7 +138,7 @@ export async function POST(req: NextRequest) {
         if (guardEnabled) {
             attachRealtimeGuard(realtimeClient, {
                 meetingId,
-                instructions: existingAgent.instructions,
+                instructions,
                 // Kill-switch: ends the call for every participant
                 endCall: () => call.end(),
             });
@@ -240,7 +244,7 @@ export async function POST(req: NextRequest) {
       
       The following are your original instructions from the live meeting assistant. Please continue to follow these behavioral guidelines as you assist the user:
       
-      ${existingAgent.instructions}
+      ${withVnPositionNote(existingAgent.instructions)}
       
       The user may ask questions about the meeting, request clarifications, or ask for follow-up actions.
       Always base your responses on the meeting summary above.
@@ -303,16 +307,34 @@ export async function POST(req: NextRequest) {
                 // Self-harm signals keep the reply supportive instead of refusing (policy tier "care")
                 const supportive = inputCheck.severity === "care" || await hasCareSignal(channelId);
 
-                const GPTResponse = await openaiClient.chat.completions.create({
-                    messages: [
-                        { role: "system", content: supportive ? `${instructions}\n\n${SUPPORT_NOTE}` : instructions },
-                        ...previousMessages,
-                        { role: "user", content: text },
-                    ],
-                    model: "gpt-4o",
-                });
+                const generateReply = async (correction?: string) => {
+                    const system = [instructions, supportive && SUPPORT_NOTE, correction].filter(Boolean).join("\n\n");
+                    const GPTResponse = await openaiClient.chat.completions.create({
+                        messages: [
+                            { role: "system", content: system },
+                            ...previousMessages,
+                            { role: "user", content: text },
+                        ],
+                        model: "gpt-4o",
+                    });
+                    return GPTResponse.choices[0].message.content;
+                };
 
-                GPTResponseText = GPTResponse.choices[0].message.content;
+                const checkReply = async (reply: string) => {
+                    const outputCheck = await checkAgentReply(text, reply);
+                    for (const result of outputCheck.results) {
+                        void recordSafetyEvent({
+                            meetingId: channelId,
+                            source: "chat",
+                            role: "agent",
+                            content: reply,
+                            result,
+                        });
+                    }
+                    return outputCheck;
+                };
+
+                GPTResponseText = await generateReply();
 
                 if (!GPTResponseText) {
                     return NextResponse.json(
@@ -321,19 +343,22 @@ export async function POST(req: NextRequest) {
                     );
                 }
 
-                const outputCheck = await checkSafety({ query: text, response: GPTResponseText });
-                void recordSafetyEvent({
-                    meetingId: channelId,
-                    source: "chat",
-                    role: "agent",
-                    content: GPTResponseText,
-                    result: outputCheck,
-                });
+                let outputCheck = await checkReply(GPTResponseText);
 
-                const outputSeverity = severityOf(outputCheck, "agent");
-                if (outputSeverity === "block") {
+                // A reply that only broke the Vietnam content policy is regenerated once with a correction
+                const policyOnly = outputCheck.severity === "block" && outputCheck.results.every((result) =>
+                    severityOf(result, "agent") !== "block" || (isVnPolicyResult(result) && result.violation));
+                if (policyOnly) {
+                    const corrected = await generateReply(VN_CORRECTION_NOTE);
+                    if (corrected) {
+                        GPTResponseText = corrected;
+                        outputCheck = await checkReply(corrected);
+                    }
+                }
+
+                if (outputCheck.severity === "block") {
                     GPTResponseText = CHAT_REFUSAL;
-                } else if (outputSeverity === "care") {
+                } else if (outputCheck.severity === "care") {
                     GPTResponseText = CHAT_SUPPORT_REPLY;
                 }
             }

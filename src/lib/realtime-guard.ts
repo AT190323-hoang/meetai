@@ -1,15 +1,17 @@
 import "server-only";
 import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 
-import { checkSafety, type SafetyResult } from "@/lib/nemotron";
-import type { JailbreakResult } from "@/lib/jailbreak";
 import {
+    checkAgentReply,
     checkUserInput,
     incrementBlockedTurns,
+    isVnPolicyResult,
     recordSafetyEvent,
     recordUserInputEvents,
     severityOf,
+    type GuardResult,
 } from "@/lib/safety-events";
+import { VN_CORRECTION_NOTE } from "@/lib/vn-policy";
 import {
     FINAL_WARNING_NOTE,
     KILL_NOTE,
@@ -67,15 +69,24 @@ export function attachRealtimeGuard(
     let killed = false;
     let callEnded = false;
 
-    const log = (message: string, results: (SafetyResult | JailbreakResult)[] = []) => {
+    const describe = (result: GuardResult) => {
+        if (isVnPolicyResult(result)) {
+            const verdict = result.violation ? "VIOLATION" : result.unverified ? "unverified" : "ok";
+            return `vn_policy=${verdict}${result.type ? `(${result.type})` : ""}`;
+        }
+        if ("jailbreak" in result) {
+            return `${result.detector}=${result.jailbreak ? "JAILBREAK" : "ok"}${result.technique ? `(${result.technique})` : ""}`;
+        }
+        // Nemotron returns one category list for the whole exchange, so show both verdicts
+        return `content_safety=user:${result.userSafe ? "safe" : "UNSAFE"}` +
+            (result.responseSafe === null ? "" : `,agent:${result.responseSafe ? "safe" : "UNSAFE"}`) +
+            `[${result.categories.join(", ")}]`;
+    };
+
+    const log = (message: string, results: GuardResult[] = []) => {
         const details = results
             .map((result) => {
-                const verdict = "detector" in result
-                    ? `${result.detector}=${result.jailbreak ? "JAILBREAK" : "ok"}${result.technique ? `(${result.technique})` : ""}`
-                    // Nemotron returns one category list for the whole exchange, so show both verdicts
-                    : `content_safety=user:${result.userSafe ? "safe" : "UNSAFE"}` +
-                      (result.responseSafe === null ? "" : `,agent:${result.responseSafe ? "safe" : "UNSAFE"}`) +
-                      `[${result.categories.join(", ")}]`;
+                const verdict = describe(result);
                 return ` ${verdict} ${result.latencyMs}ms${result.error ? ` error=${result.error}` : ""}`;
             })
             .join(" |");
@@ -265,20 +276,21 @@ export function attachRealtimeGuard(
 
         state.checking = true;
         state.checkedLength = state.text.length;
-        const result = await checkSafety({ query: lastUserText, response: state.text });
+        const { results, severity } = await checkAgentReply(lastUserText, state.text);
         state.checking = false;
-        void recordSafetyEvent({
-            meetingId,
-            source: "realtime",
-            role: "agent",
-            content: state.text,
-            result,
-            caughtInTime: state.active,
-        });
+        for (const result of results) {
+            void recordSafetyEvent({
+                meetingId,
+                source: "realtime",
+                role: "agent",
+                content: state.text,
+                result,
+                caughtInTime: state.active,
+            });
+        }
 
-        const severity = severityOf(result, "agent");
         if (!severity || severity === "log") {
-            log(`agent chunk ${severity === "log" ? "logged" : "safe"}`, [result]);
+            log(`agent chunk ${severity === "log" ? "logged" : "safe"}`, results);
             // The final check is skipped while another check is in flight, so run it now
             if (state.transcriptDone && state.checkedLength < state.text.length) {
                 void checkResponse(responseId, true);
@@ -287,14 +299,17 @@ export function attachRealtimeGuard(
         }
 
         // `active` tells whether the verdict came in before the agent finished generating
-        log(`agent response ${severity.toUpperCase()} (caught in time: ${state.active}) "${state.text}"`, [result]);
+        log(`agent response ${severity.toUpperCase()} (caught in time: ${state.active}) "${state.text}"`, results);
         if (severity === "care") {
             // Harmful self-harm content from the agent: cut it and answer supportively instead
             enableSupportMode();
             refuse(SUPPORT_RETRY_NOTE);
             return;
         }
-        refuse(REFUSAL_NOTE);
+        // Only the Vietnam content policy objected: have the agent correct itself instead of refusing
+        const policyOnly = results.every((result) =>
+            severityOf(result, "agent") !== "block" || (isVnPolicyResult(result) && result.violation));
+        refuse(policyOnly ? VN_CORRECTION_NOTE : REFUSAL_NOTE);
     };
 
     const onTranscriptDelta = (event: { response_id: string; delta: string }) => {

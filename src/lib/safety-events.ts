@@ -9,23 +9,32 @@ import {
     detectJailbreakNemoGuard,
     type JailbreakResult,
 } from "@/lib/jailbreak";
+import { detectVnPolicy, type VnPolicyResult } from "@/lib/vn-policy";
 import {
     categorySeverity,
     JAILBREAK_SEVERITY,
     maxSeverity,
     shouldFlagMeeting,
+    VN_POLICY_SEVERITY,
+    VN_UNVERIFIED_SEVERITY,
     type Severity,
 } from "@/lib/safety-policy";
 
-type GuardResult = SafetyResult | JailbreakResult;
+export type GuardResult = SafetyResult | JailbreakResult | VnPolicyResult;
 
 const isJailbreakResult = (result: GuardResult): result is JailbreakResult =>
-    "detector" in result;
+    "jailbreak" in result;
+
+export const isVnPolicyResult = (result: GuardResult): result is VnPolicyResult =>
+    "detector" in result && result.detector === "vn_policy";
 
 /** Whether a verdict flags the content; content-safety results are read for the given role. */
 export function isUnsafe(result: GuardResult, role: "user" | "agent") {
     if (isJailbreakResult(result)) {
         return result.jailbreak;
+    }
+    if (isVnPolicyResult(result)) {
+        return result.violation || result.unverified;
     }
     return role === "user" ? !result.userSafe : result.responseSafe === false;
 }
@@ -35,25 +44,62 @@ export function severityOf(result: GuardResult, role: "user" | "agent"): Severit
     if (!isUnsafe(result, role)) {
         return null;
     }
-    return isJailbreakResult(result) ? JAILBREAK_SEVERITY : categorySeverity(result.categories);
+    if (isJailbreakResult(result)) {
+        return JAILBREAK_SEVERITY;
+    }
+    if (isVnPolicyResult(result)) {
+        return result.violation ? VN_POLICY_SEVERITY : VN_UNVERIFIED_SEVERITY;
+    }
+    return categorySeverity(result.categories);
 }
 
 /**
- * Runs every user-input detector in parallel: Nemotron content safety plus both jailbreak
- * detectors (Nemotron Safety Guard does not detect jailbreaks on its own). The user message is
- * checked alone: pairing it with an agent reply skews Nemotron's user verdict and categories.
+ * Runs every user-input detector in parallel: Nemotron content safety, both jailbreak detectors
+ * (Nemotron Safety Guard does not detect jailbreaks on its own) and the Vietnam content policy.
+ * The user message is checked alone: pairing it with an agent reply skews Nemotron's user verdict.
  */
 export async function checkUserInput(query: string) {
     const results: GuardResult[] = await Promise.all([
         checkSafety({ query }),
         detectJailbreakNemoGuard(query),
         detectJailbreakLLM(query),
+        detectVnPolicy(query),
     ]);
 
     return {
         results,
         severity: maxSeverity(results.map((result) => severityOf(result, "user"))),
     };
+}
+
+/**
+ * Checks an agent reply: Nemotron judges it paired with the user's message, the Vietnam content
+ * policy judges the reply with the message as context. Only the reply's verdicts are used.
+ */
+export async function checkAgentReply(query: string, reply: string) {
+    const results: GuardResult[] = await Promise.all([
+        checkSafety({ query, response: reply }),
+        detectVnPolicy(reply, query),
+    ]);
+
+    return {
+        results,
+        severity: maxSeverity(results.map((result) => severityOf(result, "agent"))),
+    };
+}
+
+/** Category labels stored in safety_events for a verdict. */
+function categoriesOf(result: GuardResult) {
+    if (isJailbreakResult(result)) {
+        return result.jailbreak ? [`Jailbreak${result.technique ? `: ${result.technique}` : ""}`] : [];
+    }
+    if (isVnPolicyResult(result)) {
+        if (result.violation) {
+            return [`VN policy${result.type ? `: ${result.type}` : ""}`];
+        }
+        return result.unverified ? ["VN policy: unverified"] : [];
+    }
+    return result.categories;
 }
 
 /**
@@ -77,7 +123,6 @@ export async function recordSafetyEvent({
 }) {
     const unsafe = isUnsafe(result, role);
     const severity = severityOf(result, role);
-    const jailbreak = isJailbreakResult(result);
 
     // One retry per write: transient connect timeouts to Neon were observed during calls
     const withRetry = async (write: () => Promise<unknown>) => {
@@ -93,13 +138,11 @@ export async function recordSafetyEvent({
             meetingId,
             source,
             role,
-            detector: jailbreak ? result.detector : "content_safety",
+            detector: "detector" in result ? result.detector : "content_safety",
             content,
             unsafe,
             severity,
-            categories: jailbreak
-                ? (result.jailbreak ? [`Jailbreak${result.technique ? `: ${result.technique}` : ""}`] : [])
-                : result.categories,
+            categories: categoriesOf(result),
             latencyMs: result.latencyMs,
             caughtInTime,
             error: result.error,

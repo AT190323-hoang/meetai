@@ -112,6 +112,7 @@ export const safetyDetector = pgEnum("safety_detector", [
   "content_safety",
   "jailbreak_nemoguard",
   "jailbreak_llm",
+  "vn_policy",
 ]);
 
 // Policy tier of an unsafe verdict (src/lib/safety-policy.ts); null when the content is safe

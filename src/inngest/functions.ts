@@ -5,8 +5,7 @@ import { StreamTranscriptItem } from "@/modules/meetings/types";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
-import { checkSafety } from "@/lib/nemotron";
-import { checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
+import { checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
 const summerizer = createAgent({
   name: "summarizer",
@@ -172,9 +171,9 @@ export const meetingsSafetyAudit = inngest.createFunction(
 
         // The user message is checked alone (as in the call); the pair is only used for the reply
         await Promise.all(batch.map(async (turn) => {
-          const [userCheck, responseResult] = await Promise.all([
+          const [userCheck, replyCheck] = await Promise.all([
             turn.query ? checkUserInput(turn.query) : null,
-            turn.response ? checkSafety({ query: turn.query, response: turn.response }) : null,
+            turn.response ? checkAgentReply(turn.query, turn.response) : null,
           ]);
 
           if (turn.query && userCheck) {
@@ -183,14 +182,14 @@ export const meetingsSafetyAudit = inngest.createFunction(
               userCheck.results
             );
           }
-          if (turn.response && responseResult) {
-            await recordSafetyEvent({
+          if (turn.response && replyCheck) {
+            await Promise.all(replyCheck.results.map((result) => recordSafetyEvent({
               meetingId,
               source: "post_call",
               role: "agent",
-              content: turn.response,
-              result: responseResult,
-            });
+              content: turn.response!,
+              result,
+            })));
           }
         }));
       });

@@ -22,7 +22,7 @@ Nhánh `feat/stream-auth`. Checklist: `kiem-thu/2026-10-21-checklist-test.md`. D
 ## 2. Vấn đề phát hiện
 
 1. **Chép lời realtime không ghi ngôn ngữ.** `gpt-4o-mini-transcribe` tự đoán ngôn ngữ và chép tiếng Việt thành chữ Trung / Thái (`งั้นก็เออของไฮบาโก`, `跟山往山來活著呢`). Hậu quả nghiêm trọng nhất: câu hỏi trung lập B1 bị `vn_policy` chặn và **tính vào bộ đếm kill-switch** → người dùng vô tội có thể bị ngắt cuộc gọi. **Đã sửa:** `input_audio_transcription.language = "vi"` (`src/app/api/webhook/route.ts`). Chờ gọi lại để kiểm chứng.
-2. **Bản chép lời sau cuộc gọi là tiếng Anh.** Stream transcription đặt `language: "en"` (`meetings.create`) và không hỗ trợ `vi`. Văn bản bị dịch méo ("tích phân" → "Tick Fun", "đạo hàm" → "Korean peninsula"), nên kiểm duyệt hậu kỳ và summary chạy trên văn bản sai (summary vẫn viết bằng tiếng Việt). Ghi vào `van-de-mo.md` để bàn.
+2. **Bản chép lời sau cuộc gọi là tiếng Anh.** Stream transcription đặt `language: "en"` (`meetings.create`) và không hỗ trợ `vi`. Văn bản bị dịch méo ("tích phân" → "Tick Fun", "đạo hàm" → "Korean peninsula"), nên kiểm duyệt hậu kỳ chạy trên văn bản sai và summary cũng ra tiếng Anh. Ghi vào `van-de-mo.md` để bàn.
 3. **Độ trễ:** `vn_policy` và `jailbreak_llm` (gpt-4o-mini) có lúc ~12 s → nhiều lượt `caught_in_time = false`. Dữ liệu cho khảo sát A2 (strict kèm timeout); một phần có thể do mạng máy dev.
 4. **Kiểm duyệt hậu kỳ chặn nhầm câu từ chối của agent** ("This is the last warning…") khi ghép cặp với câu hỏi chế tạo bom — lệch kết quả khi ghép cặp đã biết; không ảnh hưởng cuộc gọi trực tiếp.
 

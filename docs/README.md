@@ -6,6 +6,7 @@
 | [safety-guard.md](safety-guard.md) | Lớp kiểm duyệt an toàn (NVIDIA Nemotron + phát hiện jailbreak): thiết kế, quyết định, số liệu |
 | [van-de-mo.md](van-de-mo.md) | Các vấn đề còn mở, quyết định đang chờ, việc cần làm tiếp |
 | [khao-sat/](khao-sat/) | Kết quả khảo sát trước khi quyết định (số đo, phương án) |
+| [kiem-thu/](kiem-thu/) | Checklist test cho người dùng chạy (chat, cuộc gọi thật) |
 | [de-xuat/](de-xuat/) | Các đề xuất thiết kế đang chờ quyết định |
 | [quy-trinh-lam-viec.md](quy-trinh-lam-viec.md) | Quy trình làm việc đề xuất cho các chức năng tiếp theo |
 | [nhat-ky/](nhat-ky/) | Nhật ký từng phiên làm việc: đã làm gì, lỗi gì, sửa thế nào |

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetings, safetyEvents } from "@/db/schema";
@@ -185,7 +185,11 @@ export async function getFlagCause(meetingId: string): Promise<"user" | "agent">
         .where(and(
             eq(safetyEvents.meetingId, meetingId),
             eq(safetyEvents.role, "user"),
-            eq(safetyEvents.severity, "block"),
+            // Events recorded before severity existed only have `unsafe`
+            or(
+                eq(safetyEvents.severity, "block"),
+                and(isNull(safetyEvents.severity), eq(safetyEvents.unsafe, true)),
+            ),
         ))
         .limit(1);
     return userBlock ? "user" : "agent";

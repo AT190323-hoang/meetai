@@ -1,5 +1,5 @@
-import { and, eq, not } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
+import { and, eq, isNull, not } from "drizzle-orm";
+import { after, NextRequest, NextResponse } from "next/server";
 import {
     MessageNewEvent,
     CallEndedEvent,
@@ -32,19 +32,37 @@ import { VN_CORRECTION_NOTE, withVnPositionNote } from "@/lib/vn-policy";
 
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+// Fixed replies are in Vietnamese: the product targets Vietnamese users (decision A1)
 const CHAT_REFUSAL =
-    "Sorry, I can't help with that request. Is there anything else about the meeting I can help you with?";
+    "Xin lỗi, mình không thể hỗ trợ yêu cầu này. Bạn cần mình giúp gì khác về cuộc họp không?";
 
 const CHAT_LOCKED =
-    "Chat is locked for this meeting because it was flagged by the safety system.";
+    "Cuộc trò chuyện của meeting này đã bị khóa vì hệ thống an toàn phát hiện nội dung vi phạm.";
 
 // Replaces a generated reply that was flagged as harmful self-harm content
 const CHAT_SUPPORT_REPLY =
-    "I'm really sorry you're going through this. You don't have to face it alone. Please consider reaching out to someone you trust, a doctor or a mental health hotline. I'm here if you want to keep talking.";
+    "Mình rất tiếc khi bạn đang trải qua điều này. Bạn không phải đối mặt với nó một mình. Hãy thử chia sẻ với người bạn tin tưởng, bác sĩ hoặc chuyên gia tâm lý. Mình vẫn ở đây nếu bạn muốn nói tiếp.";
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
     return streamVideo.verifyWebhook(body, signature);
 };
+
+// Chat messages already being answered, so Stream's webhook retries do not post extra replies.
+// In memory: one Node process serves the webhook in dev and on the planned EC2 deployment (A3).
+const claimedChatMessages = new Set<string>();
+const MAX_CLAIMED_CHAT_MESSAGES = 1000;
+
+function claimChatMessage(messageId: string) {
+    if (claimedChatMessages.has(messageId)) {
+        return false;
+    }
+    if (claimedChatMessages.size >= MAX_CLAIMED_CHAT_MESSAGES) {
+        // Sets iterate in insertion order, so this drops the oldest id
+        claimedChatMessages.delete(claimedChatMessages.values().next().value!);
+    }
+    claimedChatMessages.add(messageId);
+    return true;
+}
 
 export async function POST(req: NextRequest) {
     const signature = req.headers.get("x-signature");
@@ -116,6 +134,16 @@ export async function POST(req: NextRequest) {
         }
 
         const call = streamVideo.video.call("default", meetingId);
+
+        // Calls created before members were set up lack the agent; the "user" role alone cannot
+        // join arbitrary calls. Best effort: a failure here must not stop the agent from connecting.
+        try {
+            // The role must be explicit: without it the member gets the user's global role, which has no access
+            await call.updateCallMembers({ update_members: [{ user_id: existingAgent.id, role: "call_member" }] });
+        } catch (error) {
+            console.error(`[webhook] failed to add agent ${existingAgent.id} as a member of call ${meetingId}`, error);
+        }
+
         const realtimeClient = await streamVideo.video.connectOpenAi({
             call,
             openAiApiKey: process.env.OPENAI_API_KEY!,
@@ -131,8 +159,12 @@ export async function POST(req: NextRequest) {
             instructions,
             // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies
             turn_detection: { type: "server_vad" },
-            // User transcripts are required by the Nemotron realtime guard
-            ...(guardEnabled && { input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const } }),
+            // User transcripts are required by the Nemotron realtime guard. Without a language the
+            // model guesses it and often writes Vietnamese speech as Chinese or Thai, which the
+            // guard then misjudges (a neutral sovereignty question was blocked as a violation)
+            ...(guardEnabled && {
+                input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const, language: "vi" },
+            }),
         });
 
         if (guardEnabled) {
@@ -174,16 +206,19 @@ export async function POST(req: NextRequest) {
         const event = payload as CallTranscriptionReadyEvent;
         const meetingId = event.call_cid.split(":")[1];
 
+        // Only the first transcription counts: a stray session after the call ended (seen right
+        // after the kill-switch) produces an empty one that would overwrite the real transcript
         const [updatedMeeting] = await db
             .update(meetings)
             .set({
                 transcriptUrl: event.call_transcription.url,
             })
-            .where(eq(meetings.id, meetingId))
+            .where(and(eq(meetings.id, meetingId), isNull(meetings.transcriptUrl)))
             .returning();
 
         if (!updatedMeeting) {
-            return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+            console.log(`[webhook] ignored transcription ${event.call_transcription.filename} for meeting ${meetingId}: not found or already transcribed`);
+            return NextResponse.json({ status: "ignored" });
         }
 
         await inngest.send({
@@ -209,8 +244,9 @@ export async function POST(req: NextRequest) {
         const userId = event.user?.id;
         const channelId = event.channel_id;
         const text = event.message?.text;
+        const messageId = event.message?.id;
 
-        if (!userId || !channelId || !text) {
+        if (!userId || !channelId || !text || !messageId) {
             return NextResponse.json(
                 { error: "Missing required fields" },
                 { status: 400 }
@@ -235,6 +271,13 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
+        // Only the meeting owner may talk to the agent about it: anyone else posting into a channel
+        // with this meeting's id would otherwise receive the meeting summary
+        if (userId !== existingAgent.id && userId !== existingMeeting.userId) {
+            console.warn(`[webhook] ignored chat message from non-owner ${userId} in meeting ${channelId}`);
+            return NextResponse.json({ status: "ignored" });
+        }
+
         if (userId !== existingAgent.id) {
             const instructions = `
       You are an AI assistant helping the user revisit a recently completed meeting.
@@ -255,114 +298,125 @@ export async function POST(req: NextRequest) {
       
       Be concise, helpful, and focus on providing accurate information from the meeting and the ongoing conversation.
       `;
-            const channel = streamChat.channel("messaging", channelId);
-            await channel.watch();
-
-            const replyAsAgent = async (replyText: string) => {
-                const avatarUrl = generateAvatarUri({
-                    seed: existingAgent.name,
-                    variant: "botttsNeutral",
-                });
-
-                await streamChat.upsertUser({
-                    id: existingAgent.id,
-                    name: existingAgent.name,
-                    image: avatarUrl,
-                });
-
-                await channel.sendMessage({
-                    text: replyText,
-                    user: {
-                        id: existingAgent.id,
-                        name: existingAgent.name,
-                        image: avatarUrl,
-                    }
-                });
-            };
-
-            // Quarantined meetings never reach GPT: the summary may carry content injected during the call (A5)
-            if (existingMeeting.safetyStatus === "flagged") {
-                await replyAsAgent(CHAT_LOCKED);
-                return NextResponse.json({ status: "ok" });
+            // Stream retries a webhook that does not answer within a few seconds, and every retry
+            // posted another reply (the guard and GPT take longer than that), so the reply is
+            // produced after the response, and a message is answered only once
+            if (!claimChatMessage(messageId)) {
+                return NextResponse.json({ status: "duplicate" });
             }
 
-            const previousMessages = channel.state.messages
-                .slice(-5)
-                .filter((msg) => msg.text && msg.text.trim() !== "")
-                .map<ChatCompletionMessageParam>((message) => ({
-                    role: message.user?.id === existingAgent.id ? "assistant" : "user",
-                    content: message.text || "",
-                }));
+            after(async () => {
+                try {
+                    const channel = streamChat.channel("messaging", channelId);
+                    await channel.watch();
 
-            // Chat is text-only, so the guard can block before and after GPT
-            const inputCheck = await checkUserInput(text);
-            void recordUserInputEvents(
-                { meetingId: channelId, source: "chat", content: text },
-                inputCheck.results
-            );
-
-            let GPTResponseText: string | null = CHAT_REFUSAL;
-
-            if (inputCheck.severity !== "block") {
-                // Self-harm signals keep the reply supportive instead of refusing (policy tier "care")
-                const supportive = inputCheck.severity === "care" || await hasCareSignal(channelId);
-
-                const generateReply = async (correction?: string) => {
-                    const system = [instructions, supportive && SUPPORT_NOTE, correction].filter(Boolean).join("\n\n");
-                    const GPTResponse = await openaiClient.chat.completions.create({
-                        messages: [
-                            { role: "system", content: system },
-                            ...previousMessages,
-                            { role: "user", content: text },
-                        ],
-                        model: "gpt-4o",
-                    });
-                    return GPTResponse.choices[0].message.content;
-                };
-
-                const checkReply = async (reply: string) => {
-                    const outputCheck = await checkAgentReply(text, reply);
-                    for (const result of outputCheck.results) {
-                        void recordSafetyEvent({
-                            meetingId: channelId,
-                            source: "chat",
-                            role: "agent",
-                            content: reply,
-                            result,
+                    const replyAsAgent = async (replyText: string) => {
+                        const avatarUrl = generateAvatarUri({
+                            seed: existingAgent.name,
+                            variant: "botttsNeutral",
                         });
+
+                        await streamChat.upsertUser({
+                            id: existingAgent.id,
+                            name: existingAgent.name,
+                            image: avatarUrl,
+                        });
+
+                        await channel.sendMessage({
+                            text: replyText,
+                            user: {
+                                id: existingAgent.id,
+                                name: existingAgent.name,
+                                image: avatarUrl,
+                            }
+                        });
+                    };
+
+                    // Quarantined meetings never reach GPT: the summary may carry content injected during the call (A5)
+                    if (existingMeeting.safetyStatus === "flagged") {
+                        await replyAsAgent(CHAT_LOCKED);
+                        return;
                     }
-                    return outputCheck;
-                };
 
-                GPTResponseText = await generateReply();
+                    const previousMessages = channel.state.messages
+                        .slice(-5)
+                        .filter((msg) => msg.text && msg.text.trim() !== "")
+                        .map<ChatCompletionMessageParam>((message) => ({
+                            role: message.user?.id === existingAgent.id ? "assistant" : "user",
+                            content: message.text || "",
+                        }));
 
-                if (!GPTResponseText) {
-                    return NextResponse.json(
-                        { error: "No response from GPT" },
-                        { status: 400 }
+                    // Chat is text-only, so the guard can block before and after GPT
+                    const inputCheck = await checkUserInput(text);
+                    void recordUserInputEvents(
+                        { meetingId: channelId, source: "chat", content: text },
+                        inputCheck.results
                     );
-                }
 
-                let outputCheck = await checkReply(GPTResponseText);
+                    let GPTResponseText: string | null = CHAT_REFUSAL;
 
-                // A reply that only broke the Vietnam content policy is regenerated once with a correction
-                const policyOnly = outputCheck.severity === "block" && outputCheck.results.every((result) =>
-                    severityOf(result, "agent") !== "block" || (isVnPolicyResult(result) && result.violation));
-                if (policyOnly) {
-                    const corrected = await generateReply(VN_CORRECTION_NOTE);
-                    if (corrected) {
-                        GPTResponseText = corrected;
-                        outputCheck = await checkReply(corrected);
+                    if (inputCheck.severity !== "block") {
+                        // Self-harm signals keep the reply supportive instead of refusing (policy tier "care")
+                        const supportive = inputCheck.severity === "care" || await hasCareSignal(channelId);
+
+                        const generateReply = async (correction?: string) => {
+                            const system = [instructions, supportive && SUPPORT_NOTE, correction].filter(Boolean).join("\n\n");
+                            const GPTResponse = await openaiClient.chat.completions.create({
+                                messages: [
+                                    { role: "system", content: system },
+                                    ...previousMessages,
+                                    { role: "user", content: text },
+                                ],
+                                model: "gpt-4o",
+                            });
+                            return GPTResponse.choices[0].message.content;
+                        };
+
+                        const checkReply = async (reply: string) => {
+                            const outputCheck = await checkAgentReply(text, reply);
+                            for (const result of outputCheck.results) {
+                                void recordSafetyEvent({
+                                    meetingId: channelId,
+                                    source: "chat",
+                                    role: "agent",
+                                    content: reply,
+                                    result,
+                                });
+                            }
+                            return outputCheck;
+                        };
+
+                        GPTResponseText = await generateReply();
+
+                        if (!GPTResponseText) {
+                            console.error(`[webhook] no GPT response for chat message ${messageId} in meeting ${channelId}`);
+                            return;
+                        }
+
+                        let outputCheck = await checkReply(GPTResponseText);
+
+                        // A reply that only broke the Vietnam content policy is regenerated once with a correction
+                        const policyOnly = outputCheck.severity === "block" && outputCheck.results.every((result) =>
+                            severityOf(result, "agent") !== "block" || (isVnPolicyResult(result) && result.violation));
+                        if (policyOnly) {
+                            const corrected = await generateReply(VN_CORRECTION_NOTE);
+                            if (corrected) {
+                                GPTResponseText = corrected;
+                                outputCheck = await checkReply(corrected);
+                            }
+                        }
+
+                        if (outputCheck.severity === "block") {
+                            GPTResponseText = CHAT_REFUSAL;
+                        } else if (outputCheck.severity === "care") {
+                            GPTResponseText = CHAT_SUPPORT_REPLY;
+                        }
                     }
+                    await replyAsAgent(GPTResponseText);
+                } catch (error) {
+                    console.error(`[webhook] failed to answer chat message ${messageId} in meeting ${channelId}`, error);
                 }
-
-                if (outputCheck.severity === "block") {
-                    GPTResponseText = CHAT_REFUSAL;
-                } else if (outputCheck.severity === "care") {
-                    GPTResponseText = CHAT_SUPPORT_REPLY;
-                }
-            }
-            await replyAsAgent(GPTResponseText);
+            });
         }
     }
 

@@ -154,6 +154,10 @@ export const CompletedState = ({ data }: Props) => {
                                     <p className="text-sm text-muted-foreground">
                                         The summary is hidden. {hiddenDescription}
                                     </p>
+                                ) : !data.summary ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        Nothing was said in this meeting, so there is no summary.
+                                    </p>
                                 ) : (
                                 <MarkDown
                                     components={{

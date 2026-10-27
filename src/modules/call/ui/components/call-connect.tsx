@@ -43,7 +43,8 @@ export const CallConnect = ({
                 name: userName,
                 image: userImage
             },
-            tokenProvider: generateToken,
+            // The token is scoped to this meeting's call
+            tokenProvider: () => generateToken({ meetingId }),
         });
 
         setClient(_client);
@@ -52,7 +53,7 @@ export const CallConnect = ({
             _client.disconnectUser();
             setClient(undefined);
         };
-    }, [userId, userName, userImage, generateToken]);
+    }, [userId, userName, userImage, generateToken, meetingId]);
 
     const [call, setCall] = useState<Call>();
 

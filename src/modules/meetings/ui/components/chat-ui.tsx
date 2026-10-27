@@ -27,7 +27,6 @@ interface ChatUIProps {
 
 export const ChatUI = ({
     meetingId,
-    meetingName,
     userId,
     userName,
     userImage
@@ -48,15 +47,27 @@ export const ChatUI = ({
         }}
     );
 
+    const { mutateAsync: prepareChatChannel } = useMutation(
+        trpc.meetings.prepareChatChannel.mutationOptions(),
+    );
+
     useEffect(() => {
         if (!client) return;
 
-        const channel = client.channel("messaging", meetingId,{    
-            members: [userId],
-        });
+        // The server creates the channel after checking ownership; the client only watches it
+        let cancelled = false;
+        prepareChatChannel({ meetingId })
+            .then(() => {
+                if (!cancelled) {
+                    setChannel(client.channel("messaging", meetingId));
+                }
+            })
+            .catch((error) => console.error("Failed to prepare the chat channel", error));
 
-        setChannel(channel);
-        }, [client, meetingId, meetingName, userId]);
+        return () => {
+            cancelled = true;
+        };
+        }, [client, meetingId, prepareChatChannel]);
 
         if (!client) {
             return (

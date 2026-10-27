@@ -62,13 +62,26 @@ sequenceDiagram
         O-->>G: transcript người dùng (gpt-4o-mini-transcribe)
         G->>D: content_safety + 2 jailbreak detector (song song)
     end
-    alt Có vi phạm
+    alt Mức block
         G->>O: response.cancel (nếu đang trả lời)
         O-->>G: response.done
-        G->>O: response.create (chỉ dẫn: từ chối lịch sự)
+        G->>O: response.create (instructions gốc + ghi chú từ chối)
         O-->>U: "Xin lỗi, tôi không thể giúp việc đó…"
+    else Mức care (S6 của người dùng)
+        G->>O: session.update (instructions gốc + chế độ hỗ trợ), một lần cho cả phiên
     end
 ```
+
+**Xử lý theo mức** (chính sách A1, `src/lib/safety-policy.ts`):
+
+| Mức | Câu người dùng | Câu agent |
+|---|---|---|
+| `block` | Cắt lời (nếu đang trả lời) và từ chối; gắn `flagged` | Cắt lời và từ chối; gắn `flagged` |
+| `care` (S6) | **Không cắt lời**; bật chế độ hỗ trợ một lần cho cả phiên; không gắn cờ | Cắt lời, bật chế độ hỗ trợ, agent nói lại theo hướng hỗ trợ; gắn `flagged` (do agent) |
+| `log` | Chỉ ghi lại | Chỉ ghi lại |
+
+- Ghi chú từ chối và chế độ hỗ trợ được **bổ sung** vào instructions gốc của agent (không thay thế), nên agent giữ vai trò và ngôn ngữ. Chế độ hỗ trợ là chỉ dẫn của cả phiên chứ không phải mệnh lệnh mỗi lượt, để agent không lặp lại cùng một lời khuyên.
+- `client.updateSession` gộp vào cấu hình đã lưu của client, nên `turn_detection` đặt lúc kết nối vẫn được giữ.
 
 - **Không chặn trước** (non-blocking): agent trả lời bình thường, guard chạy song song → **không làm chậm agent**.
 - **Đánh đổi:** câu vi phạm có thể "lọt" một đoạn ngắn (~1–2 s audio) trước khi bị cắt. Cột `caught_in_time` ghi lại agent còn đang nói khi có kết quả hay không.
@@ -82,22 +95,22 @@ sequenceDiagram
 ### 3.2 Chat sau họp (`message.new` trong `src/app/api/webhook/route.ts`)
 
 Văn bản nên **chặn trước được**:
-1. Tin nhắn người dùng → 3 detector. Vi phạm → không gọi GPT, trả lời `CHAT_REFUSAL`.
-2. Câu trả lời GPT-4o → `content_safety`. Vi phạm → thay bằng `CHAT_REFUSAL`.
+1. Tin nhắn người dùng → 3 detector. Mức `block` → không gọi GPT, trả lời `CHAT_REFUSAL`. Mức `care`, hoặc meeting đã có tín hiệu `care` (`hasCareSignal`) → thêm chỉ dẫn hỗ trợ vào system prompt. Mức `log` → trả lời bình thường.
+2. Câu trả lời GPT-4o → `content_safety`. Mức `block` → thay bằng `CHAT_REFUSAL`; mức `care` (câu trả lời tự hại có hại) → thay bằng `CHAT_SUPPORT_REPLY`.
 
 ### 3.3 Sau cuộc gọi (`meetingsSafetyAudit` trong `src/inngest/functions.ts`)
 
 Chạy song song với function tóm tắt, cùng event `meetings/processing`:
 1. Tải transcript JSONL của Stream, gộp các đoạn liên tiếp của cùng người nói.
 2. Ghép cặp "người dùng → agent trả lời".
-3. Kiểm tra theo lô 5 cặp (mỗi bên tối đa 4000 ký tự — Nemotron giới hạn ngữ cảnh ~8K token).
+3. Kiểm tra theo lô 5 cặp (mỗi bên tối đa 4000 ký tự — Nemotron giới hạn ngữ cảnh ~8K token). Câu người dùng được kiểm **riêng** bằng `checkUserInput` (giống trong cuộc gọi); cặp câu hỏi + câu trả lời chỉ dùng để chấm câu agent (từ 21/10, xem mục 9c).
 4. Cuối cùng đặt `safety_status = safe` nếu chưa bị `flagged`.
 
 ## 4. Lưu trữ kết quả
 
 Mọi kết quả của mọi detector đều đi qua `recordSafetyEvent` (`src/lib/safety-events.ts`):
-- Ghi một dòng vào `safety_events` (nguồn, vai, detector, nội dung, vi phạm?, nhóm, độ trễ, caught_in_time, lỗi).
-- Nếu vi phạm → `meetings.safety_status = flagged`.
+- Ghi một dòng vào `safety_events` (nguồn, vai, detector, nội dung, vi phạm?, **mức** `severity`, nhóm, độ trễ, caught_in_time, lỗi). `severity` để trống khi an toàn.
+- Gắn `meetings.safety_status = flagged` theo `shouldFlagMeeting`: mức `block`, hoặc mức `care` từ câu **agent**. Mức `log` và `care` của người dùng không gắn cờ.
 - Không bao giờ ném lỗi; thử lại 1 lần nếu lỗi kết nối DB.
 
 Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, tỷ lệ "lọt").
@@ -109,9 +122,10 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 | D1 | Guard realtime **song song**, không chặn trước | Chặn trước thêm ~0.6–1.8 s mỗi lượt, mất tính realtime | Câu vi phạm có thể lọt một đoạn ngắn |
 | D2 | Giữ cả kiểm duyệt **sau cuộc gọi** | Kiểm lại toàn bộ transcript (từng cặp hỏi–đáp) bằng transcript chính thức của Stream; bắt được những gì guard realtime bỏ lỡ (lỗi API, server khựng) | Chậm, chỉ phát hiện sau. **Không** phát hiện tấn công nhiều lượt (xem A4) |
 | D3 | **Fail-open**: detector lỗi → coi như an toàn, ghi lỗi | Guard sập không được làm hỏng cuộc gọi | Khi guard lỗi, nội dung không được kiểm |
-| D4 | Ba detector cho đầu vào, OR kết quả | Nemotron không bắt jailbreak; NemoGuard bỏ sót câu ngắn/tiếng Việt | Thêm chi phí API (gpt-4o-mini) và lượt gọi NVIDIA |
+| D4 | Ba detector cho đầu vào, lấy **mức cao nhất** | Nemotron không bắt jailbreak; NemoGuard bỏ sót câu ngắn/tiếng Việt | Thêm chi phí API (gpt-4o-mini) và lượt gọi NVIDIA |
 | D5 | Dùng API hosted của NVIDIA, không tự host | Không cần GPU; độ trễ chấp nhận được | Phụ thuộc giới hạn tần suất API miễn phí |
 | D6 | Chép lời người dùng bằng `gpt-4o-mini-transcribe` | Nhanh, tốt cho tiếng Việt hơn whisper-1 | Thêm chi phí; chép sai → guard đánh giá sai |
+| D7 | Phân mức `block` / `care` / `log` (A1) | Tránh chặn oan nhóm hay báo nhầm (PII, chửi thề…); người có ý định tự hại cần được hỗ trợ, không bị trừng phạt | Nhãn lạ của Nemotron xếp `log` kèm cảnh báo (fail-open), có thể bỏ sót nếu mô hình đặt nhãn mới |
 
 ## 6. Cấu hình
 

@@ -110,6 +110,9 @@ export const safetyDetector = pgEnum("safety_detector", [
   "jailbreak_llm",
 ]);
 
+// Policy tier of an unsafe verdict (src/lib/safety-policy.ts); null when the content is safe
+export const safetySeverity = pgEnum("safety_severity", ["block", "care", "log"]);
+
 // One row per Nemotron verdict, used for flagging and for latency/coverage metrics
 export const safetyEvents = pgTable("safety_events", {
   id: text("id")
@@ -123,6 +126,7 @@ export const safetyEvents = pgTable("safety_events", {
   detector: safetyDetector("detector").notNull().default("content_safety"),
   content: text("content").notNull(),
   unsafe: boolean("unsafe").notNull(),
+  severity: safetySeverity("severity"),
   categories: text("categories").array().notNull().default([]),
   latencyMs: integer("latency_ms").notNull(),
   // Realtime only: whether the verdict arrived while the agent was still generating

@@ -3,13 +3,8 @@ import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 
 import { checkSafety, type SafetyResult } from "@/lib/nemotron";
 import type { JailbreakResult } from "@/lib/jailbreak";
-import { checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
-
-const REFUSAL_INSTRUCTIONS = `
-The previous exchange was flagged by the safety system.
-Briefly and politely tell the user you cannot help with that request,
-then offer to continue with another topic. Do not repeat or explain the unsafe content.
-`.trim();
+import { checkUserInput, recordSafetyEvent, recordUserInputEvents, severityOf } from "@/lib/safety-events";
+import { REFUSAL_NOTE, SUPPORT_NOTE, SUPPORT_RETRY_NOTE } from "@/lib/safety-policy";
 
 // Sentence boundaries used to chunk the agent transcript (also covers Vietnamese punctuation usage)
 const SENTENCE_END = /[.!?…]\s*$/;
@@ -26,18 +21,23 @@ interface ResponseState {
 
 /**
  * Shadow guard for the OpenAI Realtime agent: user and agent transcripts are classified by
- * Nemotron in parallel with the conversation (no added latency). When something is flagged,
- * the in-flight response is cancelled and the agent is told to refuse.
+ * Nemotron in parallel with the conversation (no added latency). Verdicts are acted on by
+ * policy tier (src/lib/safety-policy.ts): "block" cancels the in-flight response and makes the
+ * agent refuse, "care" switches the session to a supportive mode once, "log" only records.
  */
 export function attachRealtimeGuard(
     client: RealtimeClient,
-    { meetingId }: { meetingId: string }
+    { meetingId, instructions }: { meetingId: string; instructions: string }
 ) {
     const responses = new Map<string, ResponseState>();
     let activeResponseId: string | null = null;
     let lastUserText = "";
     let pendingRefusal = false;
     let refusalQueued = false;
+    // Guard notes are appended to the agent's instructions instead of replacing them
+    let sessionInstructions = instructions;
+    let refusalNote = REFUSAL_NOTE;
+    let supportMode = false;
 
     const log = (message: string, results: (SafetyResult | JailbreakResult)[] = []) => {
         const details = results
@@ -61,7 +61,7 @@ export function attachRealtimeGuard(
     const sendRefusal = () => {
         pendingRefusal = true;
         client.realtime.send("response.create", {
-            response: { instructions: REFUSAL_INSTRUCTIONS },
+            response: { instructions: `${sessionInstructions}\n\n${refusalNote}` },
         });
     };
 
@@ -69,16 +69,30 @@ export function attachRealtimeGuard(
     // - never send `response.cancel` without an active response
     // - never send `response.create` while a response is still active (cancel is async and
     //   only completes on `response.done`), so the refusal is queued until then
-    const refuse = () => {
+    const refuse = (note: string) => {
         if (pendingRefusal || refusalQueued) {
             return;
         }
+        refusalNote = note;
         if (activeResponseId) {
             refusalQueued = true;
             client.realtime.send("response.cancel", {});
             return;
         }
         sendRefusal();
+    };
+
+    // A persistent session instruction (not a per-turn command) keeps the conversation natural
+    // instead of repeating the same scripted advice on every self-harm turn
+    const enableSupportMode = () => {
+        if (supportMode) {
+            return;
+        }
+        supportMode = true;
+        sessionInstructions = `${instructions}\n\n${SUPPORT_NOTE}`;
+        // The client merges this into its stored config, so turn_detection set earlier is kept
+        client.updateSession({ instructions: sessionInstructions });
+        log("support mode enabled");
     };
 
     on("server.error", (event: { error: unknown }) => {
@@ -131,7 +145,7 @@ export function attachRealtimeGuard(
             }
             lastUserText = transcript;
 
-            const { results, unsafe } = await checkUserInput(transcript);
+            const { results, severity } = await checkUserInput(transcript);
             void recordUserInputEvents(
                 {
                     meetingId,
@@ -141,13 +155,18 @@ export function attachRealtimeGuard(
                 },
                 results
             );
-            if (!unsafe) {
-                log("user turn safe", results);
+            if (!severity || severity === "log") {
+                log(`user turn ${severity === "log" ? "logged" : "safe"}`, results);
+                return;
+            }
+            if (severity === "care") {
+                log(`user turn CARE "${transcript}"`, results);
+                enableSupportMode();
                 return;
             }
 
-            log(`user turn UNSAFE (agent responding: ${activeResponseId !== null}) "${transcript}"`, results);
-            refuse();
+            log(`user turn BLOCK (agent responding: ${activeResponseId !== null}) "${transcript}"`, results);
+            refuse(REFUSAL_NOTE);
         }
     );
 
@@ -178,8 +197,9 @@ export function attachRealtimeGuard(
             caughtInTime: state.active,
         });
 
-        if (result.responseSafe !== false) {
-            log("agent chunk safe", [result]);
+        const severity = severityOf(result, "agent");
+        if (!severity || severity === "log") {
+            log(`agent chunk ${severity === "log" ? "logged" : "safe"}`, [result]);
             // The final check is skipped while another check is in flight, so run it now
             if (state.transcriptDone && state.checkedLength < state.text.length) {
                 void checkResponse(responseId, true);
@@ -188,8 +208,14 @@ export function attachRealtimeGuard(
         }
 
         // `active` tells whether the verdict came in before the agent finished generating
-        log(`agent response UNSAFE (caught in time: ${state.active}) "${state.text}"`, [result]);
-        refuse();
+        log(`agent response ${severity.toUpperCase()} (caught in time: ${state.active}) "${state.text}"`, [result]);
+        if (severity === "care") {
+            // Harmful self-harm content from the agent: cut it and answer supportively instead
+            enableSupportMode();
+            refuse(SUPPORT_RETRY_NOTE);
+            return;
+        }
+        refuse(REFUSAL_NOTE);
     };
 
     const onTranscriptDelta = (event: { response_id: string; delta: string }) => {

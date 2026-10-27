@@ -19,12 +19,23 @@ import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
 import { attachRealtimeGuard } from "@/lib/realtime-guard";
 import { checkSafety } from "@/lib/nemotron";
-import { checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
+import {
+    checkUserInput,
+    hasCareSignal,
+    recordSafetyEvent,
+    recordUserInputEvents,
+    severityOf,
+} from "@/lib/safety-events";
+import { SUPPORT_NOTE } from "@/lib/safety-policy";
 
 const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 const CHAT_REFUSAL =
     "Sorry, I can't help with that request. Is there anything else about the meeting I can help you with?";
+
+// Replaces a generated reply that was flagged as harmful self-harm content
+const CHAT_SUPPORT_REPLY =
+    "I'm really sorry you're going through this. You don't have to face it alone. Please consider reaching out to someone you trust, a doctor or a mental health hotline. I'm here if you want to keep talking.";
 
 function verifySignatureWithSDK(body: string, signature: string): boolean {
     return streamVideo.verifyWebhook(body, signature);
@@ -118,7 +129,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (guardEnabled) {
-            attachRealtimeGuard(realtimeClient, { meetingId });
+            attachRealtimeGuard(realtimeClient, { meetingId, instructions: existingAgent.instructions });
         }
     } else if (eventType === "call.session_participant_left") {
         const event = payload as CallSessionParticipantLeftEvent;
@@ -252,10 +263,13 @@ export async function POST(req: NextRequest) {
 
             let GPTResponseText: string | null = CHAT_REFUSAL;
 
-            if (!inputCheck.unsafe) {
+            if (inputCheck.severity !== "block") {
+                // Self-harm signals keep the reply supportive instead of refusing (policy tier "care")
+                const supportive = inputCheck.severity === "care" || await hasCareSignal(channelId);
+
                 const GPTResponse = await openaiClient.chat.completions.create({
                     messages: [
-                        { role: "system", content: instructions },
+                        { role: "system", content: supportive ? `${instructions}\n\n${SUPPORT_NOTE}` : instructions },
                         ...previousMessages,
                         { role: "user", content: text },
                     ],
@@ -280,8 +294,11 @@ export async function POST(req: NextRequest) {
                     result: outputCheck,
                 });
 
-                if (outputCheck.responseSafe === false) {
+                const outputSeverity = severityOf(outputCheck, "agent");
+                if (outputSeverity === "block") {
                     GPTResponseText = CHAT_REFUSAL;
+                } else if (outputSeverity === "care") {
+                    GPTResponseText = CHAT_SUPPORT_REPLY;
                 }
             }
             const avatarUrl = generateAvatarUri({

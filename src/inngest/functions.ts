@@ -6,8 +6,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
 import { checkSafety } from "@/lib/nemotron";
-import { recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
-import { detectJailbreakLLM, detectJailbreakNemoGuard } from "@/lib/jailbreak";
+import { checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
 const summerizer = createAgent({
   name: "summarizer",
@@ -171,27 +170,26 @@ export const meetingsSafetyAudit = inngest.createFunction(
       await step.run(`audit-turns-${i}`, async () => {
         const batch = turns.slice(i, i + AUDIT_BATCH_SIZE);
 
+        // The user message is checked alone (as in the call); the pair is only used for the reply
         await Promise.all(batch.map(async (turn) => {
-          const [result, ...jailbreakResults] = await Promise.all([
-            checkSafety(turn),
-            ...(turn.query
-              ? [detectJailbreakNemoGuard(turn.query), detectJailbreakLLM(turn.query)]
-              : []),
+          const [userCheck, responseResult] = await Promise.all([
+            turn.query ? checkUserInput(turn.query) : null,
+            turn.response ? checkSafety({ query: turn.query, response: turn.response }) : null,
           ]);
 
-          if (turn.query) {
+          if (turn.query && userCheck) {
             await recordUserInputEvents(
               { meetingId, source: "post_call", content: turn.query },
-              [result, ...jailbreakResults]
+              userCheck.results
             );
           }
-          if (turn.response) {
+          if (turn.response && responseResult) {
             await recordSafetyEvent({
               meetingId,
               source: "post_call",
               role: "agent",
               content: turn.response,
-              result,
+              result: responseResult,
             });
           }
         }));

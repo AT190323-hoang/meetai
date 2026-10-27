@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetings, safetyEvents } from "@/db/schema";
@@ -9,6 +9,13 @@ import {
     detectJailbreakNemoGuard,
     type JailbreakResult,
 } from "@/lib/jailbreak";
+import {
+    categorySeverity,
+    JAILBREAK_SEVERITY,
+    maxSeverity,
+    shouldFlagMeeting,
+    type Severity,
+} from "@/lib/safety-policy";
 
 type GuardResult = SafetyResult | JailbreakResult;
 
@@ -23,9 +30,18 @@ export function isUnsafe(result: GuardResult, role: "user" | "agent") {
     return role === "user" ? !result.userSafe : result.responseSafe === false;
 }
 
+/** Policy tier of a verdict, or null when it is safe. */
+export function severityOf(result: GuardResult, role: "user" | "agent"): Severity | null {
+    if (!isUnsafe(result, role)) {
+        return null;
+    }
+    return isJailbreakResult(result) ? JAILBREAK_SEVERITY : categorySeverity(result.categories);
+}
+
 /**
  * Runs every user-input detector in parallel: Nemotron content safety plus both jailbreak
- * detectors (Nemotron Safety Guard does not detect jailbreaks on its own).
+ * detectors (Nemotron Safety Guard does not detect jailbreaks on its own). The user message is
+ * checked alone: pairing it with an agent reply skews Nemotron's user verdict and categories.
  */
 export async function checkUserInput(query: string) {
     const results: GuardResult[] = await Promise.all([
@@ -36,12 +52,12 @@ export async function checkUserInput(query: string) {
 
     return {
         results,
-        unsafe: results.some((result) => isUnsafe(result, "user")),
+        severity: maxSeverity(results.map((result) => severityOf(result, "user"))),
     };
 }
 
 /**
- * Persists a guard verdict and flags the meeting when the content is unsafe.
+ * Persists a guard verdict and flags the meeting when the policy says so (see `shouldFlagMeeting`).
  * Never throws: guard bookkeeping must not break the conversation it is guarding.
  */
 export async function recordSafetyEvent({
@@ -60,6 +76,7 @@ export async function recordSafetyEvent({
     caughtInTime?: boolean;
 }) {
     const unsafe = isUnsafe(result, role);
+    const severity = severityOf(result, role);
     const jailbreak = isJailbreakResult(result);
 
     // One retry per write: transient connect timeouts to Neon were observed during calls
@@ -79,6 +96,7 @@ export async function recordSafetyEvent({
             detector: jailbreak ? result.detector : "content_safety",
             content,
             unsafe,
+            severity,
             categories: jailbreak
                 ? (result.jailbreak ? [`Jailbreak${result.technique ? `: ${result.technique}` : ""}`] : [])
                 : result.categories,
@@ -87,7 +105,7 @@ export async function recordSafetyEvent({
             error: result.error,
         }));
 
-        if (unsafe) {
+        if (shouldFlagMeeting(severity, role)) {
             await withRetry(() => db
                 .update(meetings)
                 .set({ safetyStatus: "flagged" })
@@ -95,6 +113,21 @@ export async function recordSafetyEvent({
         }
     } catch (error) {
         console.error(`[safety] failed to record event for meeting ${meetingId}`, error);
+    }
+}
+
+/** Whether the meeting has a self-harm signal, so stateless handlers can stay in supportive mode. */
+export async function hasCareSignal(meetingId: string) {
+    try {
+        const [row] = await db
+            .select({ id: safetyEvents.id })
+            .from(safetyEvents)
+            .where(and(eq(safetyEvents.meetingId, meetingId), eq(safetyEvents.severity, "care")))
+            .limit(1);
+        return row !== undefined;
+    } catch (error) {
+        console.error(`[safety] failed to read care signal for meeting ${meetingId}`, error);
+        return false;
     }
 }
 

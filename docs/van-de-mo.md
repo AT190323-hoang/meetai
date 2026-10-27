@@ -46,7 +46,8 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 
 - [ ] Kill-switch trên UI: ẩn summary / recording / transcript khi meeting `flagged`, hiển thị cảnh báo.
 - [ ] Trang liệt kê sự kiện vi phạm của từng meeting.
-- [ ] Áp dụng chính sách phân mức (A1 đã chốt) → kill-switch/cách ly (A5) → `vn_policy` → chế độ guard (A2) → thực nghiệm → deploy (A3).
+- [~] **Chính sách phân mức (A1): đã code trên nhánh `feat/safety-policy` (21/10), chờ test** — chat (test được bằng chữ) và cuộc gọi thật (block / care / log). Chưa merge về `29-finish`.
+- [ ] Tiếp theo: kill-switch/cách ly (A5) → `vn_policy` → chế độ guard (A2) → thực nghiệm → deploy (A3).
 - [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
 - [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI).
 - [ ] Ẩn danh PII trước khi lưu (mục 4.5 đề cương).

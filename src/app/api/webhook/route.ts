@@ -141,8 +141,12 @@ export async function POST(req: NextRequest) {
             instructions,
             // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies
             turn_detection: { type: "server_vad" },
-            // User transcripts are required by the Nemotron realtime guard
-            ...(guardEnabled && { input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const } }),
+            // User transcripts are required by the Nemotron realtime guard. Without a language the
+            // model guesses it and often writes Vietnamese speech as Chinese or Thai, which the
+            // guard then misjudges (a neutral sovereignty question was blocked as a violation)
+            ...(guardEnabled && {
+                input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const, language: "vi" },
+            }),
         });
 
         if (guardEnabled) {

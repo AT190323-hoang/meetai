@@ -6,7 +6,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
 import { SUMMARY_MODEL } from "@/lib/models";
-import { checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
+import { agentReplySeverity, checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
 const summerizer = createAgent({
   name: "summarizer",
@@ -198,12 +198,15 @@ export const meetingsSafetyAudit = inngest.createFunction(
             );
           }
           if (turn.response && replyCheck) {
+            // A refusal to a blocked request is not the agent's violation (agentReplySeverity)
+            const userBlocked = userCheck?.severity === "block";
             await Promise.all(replyCheck.results.map((result) => recordSafetyEvent({
               meetingId,
               source: "post_call",
               role: "agent",
               content: turn.response!,
               result,
+              severity: agentReplySeverity(result, userBlocked),
             })));
           }
         }));

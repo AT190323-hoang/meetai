@@ -2,6 +2,7 @@ import "server-only";
 import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 
 import {
+    agentReplySeverity,
     checkAgentReply,
     checkUserInput,
     incrementBlockedTurns,
@@ -17,12 +18,14 @@ import { VN_CORRECTION_NOTE } from "@/lib/vn-policy";
 import {
     FINAL_WARNING_NOTE,
     KILL_NOTE,
+    maxSeverity,
     REFUSAL_NOTE,
     SAFETY_KILL_AT,
     SAFETY_WARN_AT,
     SUPPORT_NOTE,
     SUPPORT_RETRY_NOTE,
     WARNING_NOTE,
+    type Severity,
 } from "@/lib/safety-policy";
 
 // Sentence boundaries used to chunk the agent transcript (also covers Vietnamese punctuation usage)
@@ -32,6 +35,9 @@ const MIN_CHUNK_LENGTH = 40;
 const KILL_FALLBACK_MS = 15_000;
 // Ending the call is retried: a failed call.end() left the call running after the kill-switch
 const END_CALL_ATTEMPTS = 3;
+// How long an agent reply check waits for the transcript / verdict of the user turn it answers
+const TURN_WAIT_MS = 5_000;
+const TURN_VERDICT_WAIT_MS = 30_000;
 // Strict mode: longest the agent waits for the guard before answering anyway (A2 survey)
 const STRICT_TIMEOUT_MS = Number(process.env.GUARD_STRICT_TIMEOUT_MS ?? 2000);
 
@@ -45,9 +51,29 @@ interface Turn {
     speechStoppedAt: number | null;
     responseStartMs: number | null;
     rowId: Promise<string | null> | null;
+    // The transcript (null when empty or failed) and the user verdict, as soon as they are known
+    text: Promise<string | null>;
+    verdict: Promise<Severity | null>;
+    blocked: boolean;
+    setText: (text: string | null) => void;
+    setVerdict: (severity: Severity | null) => void;
 }
 
+function createTurn(seq: number, speechStoppedAt: number | null): Turn {
+    let setText!: (text: string | null) => void;
+    let setVerdict!: (severity: Severity | null) => void;
+    const text = new Promise<string | null>((resolve) => { setText = resolve; });
+    const verdict = new Promise<Severity | null>((resolve) => { setVerdict = resolve; });
+    return { seq, speechStoppedAt, responseStartMs: null, rowId: null, text, verdict, blocked: false, setText, setVerdict };
+}
+
+/** Resolves to the promise's value, or to `fallback` after `ms` (a turn whose transcript never comes). */
+const within = <T,>(promise: Promise<T>, ms: number, fallback: T) =>
+    Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+
 interface ResponseState {
+    // The user turn this response answers (the latest one when it was created)
+    turn: Turn | null;
     text: string;
     checkedLength: number;
     checking: boolean;
@@ -260,6 +286,7 @@ export function attachRealtimeGuard(
             client.realtime.send("response.cancel", {});
         }
         responses.set(event.response.id, {
+            turn: currentTurn,
             text: "",
             checkedLength: 0,
             checking: false,
@@ -303,7 +330,7 @@ export function attachRealtimeGuard(
 
     on("server.input_audio_buffer.speech_stopped", () => {
         userSpeaking = false;
-        currentTurn = { seq: ++turnSeq, speechStoppedAt: performance.now(), responseStartMs: null, rowId: null };
+        currentTurn = createTurn(++turnSeq, performance.now());
     });
 
     // The agent's first words for the latest user turn (any response, refusals included)
@@ -347,13 +374,19 @@ export function attachRealtimeGuard(
             const transcript = event.transcript?.trim();
             // An empty transcript is usually noise: strict mode only answers a turn it still owes
             if (!transcript) {
+                currentTurn?.setText(null);
+                currentTurn?.setVerdict(null);
                 if (mode === "strict" && answerOwed) {
                     release();
                 }
                 return;
             }
             lastUserText = transcript;
-            const turn: Turn = currentTurn ?? { seq: turnSeq, speechStoppedAt: null, responseStartMs: null, rowId: null };
+            if (!currentTurn) {
+                currentTurn = createTurn(turnSeq, null);
+            }
+            const turn = currentTurn;
+            turn.setText(transcript);
             const transcribedAt = performance.now();
 
             // Shadow has nothing to decide: the agent is already answering
@@ -375,11 +408,14 @@ export function attachRealtimeGuard(
                     return;
                 }
                 decision = "block";
+                turn.blocked = true;
                 clearTimeout(timer);
                 void onBlockedTurn(transcript, [result]);
             });
             clearTimeout(timer);
             const guardMs = Math.round(performance.now() - transcribedAt);
+            turn.blocked = severity === "block";
+            turn.setVerdict(severity);
 
             // Read through a function: TypeScript narrows `decision` as if the callbacks never ran
             const decided = (): TurnDecision | null => decision;
@@ -436,6 +472,8 @@ export function attachRealtimeGuard(
     // Strict: without a transcript nothing can be checked; fail open like the detectors do
     on("server.conversation.item.input_audio_transcription.failed", (event: { error?: unknown }) => {
         log(`user transcription failed: ${JSON.stringify(event.error ?? null)}`);
+        currentTurn?.setText(null);
+        currentTurn?.setVerdict(null);
         if (mode === "strict") {
             release();
         }
@@ -457,21 +495,39 @@ export function attachRealtimeGuard(
 
         state.checking = true;
         state.checkedLength = state.text.length;
-        const { results, severity } = await checkAgentReply(lastUserText, state.text);
+        const turn = state.turn;
+        // Pair the reply with the message it answers: lastUserText may already be a newer turn, and
+        // in shadow mode the answer can start before its own transcript is in
+        const query = (turn ? await within(turn.text, TURN_WAIT_MS, null) : null) ?? lastUserText;
+        const content = state.text;
+        const { results, severity: verdictSeverity } = await checkAgentReply(query, content);
         state.checking = false;
-        for (const result of results) {
-            void recordSafetyEvent({
-                meetingId,
-                source: "realtime",
-                role: "agent",
-                content: state.text,
-                result,
-                caughtInTime: state.active,
-            });
-        }
+        const caughtInTime = state.active;
+
+        // Acted on now with what is known; a verdict on the user turn that arrives later only
+        // changes how the event is recorded (agentReplySeverity)
+        const severity = maxSeverity(results.map((result) => agentReplySeverity(result, turn?.blocked ?? false)));
+        void (async () => {
+            const userBlocked = turn
+                ? (await within(turn.verdict, TURN_VERDICT_WAIT_MS, null)) === "block"
+                : false;
+            for (const result of results) {
+                void recordSafetyEvent({
+                    meetingId,
+                    source: "realtime",
+                    role: "agent",
+                    content,
+                    result,
+                    caughtInTime,
+                    severity: agentReplySeverity(result, userBlocked),
+                });
+            }
+        })();
 
         if (!severity || severity === "log") {
-            log(`agent chunk ${severity === "log" ? "logged" : "safe"}`, results);
+            log(verdictSeverity === "block"
+                ? `agent chunk BLOCK ignored: it answers a blocked user turn, which is already refused "${content}"`
+                : `agent chunk ${severity === "log" ? "logged" : "safe"}`, results);
             // The final check is skipped while another check is in flight, so run it now
             if (state.transcriptDone && state.checkedLength < state.text.length) {
                 void checkResponse(responseId, true);
@@ -480,7 +536,7 @@ export function attachRealtimeGuard(
         }
 
         // `active` tells whether the verdict came in before the agent finished generating
-        log(`agent response ${severity.toUpperCase()} (caught in time: ${state.active}) "${state.text}"`, results);
+        log(`agent response ${severity.toUpperCase()} (caught in time: ${caughtInTime}) "${content}"`, results);
         if (severity === "care") {
             // Harmful self-harm content from the agent: cut it and answer supportively instead
             enableSupportMode();
@@ -489,7 +545,7 @@ export function attachRealtimeGuard(
         }
         // Only the Vietnam content policy objected: have the agent correct itself instead of refusing
         const policyOnly = results.every((result) =>
-            severityOf(result, "agent") !== "block" || (isVnPolicyResult(result) && result.violation));
+            agentReplySeverity(result, turn?.blocked ?? false) !== "block" || (isVnPolicyResult(result) && result.violation));
         refuse(policyOnly ? VN_CORRECTION_NOTE : REFUSAL_NOTE);
     };
 

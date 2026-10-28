@@ -21,6 +21,7 @@ node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/<tên>.mjs
 | `guard-turns-stats.cjs` | So sánh shadow / strict từ bảng `guard_turns`: cách quyết định từng lượt, thời gian chép lời, guard, tới khi agent nói (chỉ đọc DB) | Chờ cuộc gọi thật |
 | `agent-pair-check.mjs` | Vì sao Nemotron chặn nhầm câu agent: ghép với câu hỏi nó trả lời / câu hỏi sau / đứng riêng, trên ca thật 28/10 và câu có hại (chỉ Nemotron) | Ghép cặp 27/30; nguyên nhân: đoạn mở đầu chưa kịp từ chối. Xem `docs/khao-sat/agent-false-positive.md` |
 | `transcript-recorder-check.ts` | Tự kiểm module ghi transcript tiếng Việt: phát lại sự kiện thật trên client giả, ghi vào một meeting cũ rồi xoá (không gọi API trả phí) | 6/6 đạt. Xem `docs/khao-sat/vn-transcript.md` |
+| `agent-reconnect-check.ts` | Agent bị ngắt kết nối có tự nối lại không, và không nối lại sau khi cuộc gọi kết thúc (meeting + cuộc gọi tạm, xoá sau; gây ngắt bằng một lệnh server từ chối) | 28/10: 3/3 đạt, nối lại sau ~1 s |
 | `s6-multiturn.mjs` | Đưa cả chuỗi hội thoại vào Nemotron: có giúp không, có "dính cờ" không | 12/16; dính cờ 2/2, báo nhầm câu hỗ trợ của agent |
 
 Chi tiết và kết luận: [docs/safety-guard.md](../../docs/safety-guard.md) mục 9.

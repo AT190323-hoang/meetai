@@ -1,6 +1,6 @@
 # Đề xuất: ẩn danh dữ liệu cá nhân (PII) trước khi lưu (28/10/2026)
 
-> Trạng thái: **chờ người dùng quyết**. Đồ án (mục 3.1.4) ghi "ẩn danh dữ liệu cá nhân trước khi lưu trữ lâu dài… đã được thiết kế và đang hoàn thiện"; đề cương (mục 4.5) cũng nhắc. Code hiện **chưa** ẩn danh.
+> Trạng thái: **người dùng chọn phương án C ngày 29/10 (mã hoá + che mờ, bấm để hiện); đã làm trên `feat/pii-masking`**, chờ test gộp. Đồ án (mục 3.1.4) ghi "ẩn danh dữ liệu cá nhân trước khi lưu trữ lâu dài… đã được thiết kế và đang hoàn thiện"; đề cương (mục 4.5) cũng nhắc. Code hiện **chưa** ẩn danh.
 
 ## Hiện trạng: PII nằm ở đâu
 
@@ -29,3 +29,21 @@ Guard **phải đọc bản gốc** để đánh giá, nên chỉ ẩn danh **kh
 2. Thay hoàn toàn (`[số điện thoại]`) hay giữ vài chữ số cuối?
 3. Có áp dụng cho `safety_events` (bằng chứng) không — Chương 3 cần đọc lại câu bị chặn, nhưng số điện thoại không ảnh hưởng việc phân tích.
 4. Trang quản trị theo dõi vi phạm mà đồ án nhắc: làm (vai trò admin, danh sách meeting bị gắn cờ) hay sửa đồ án thành "hướng phát triển" như quyết định A5?
+
+## Quyết định và cách làm (29/10)
+
+**Phương án C:** không lưu PII dạng rõ; transcript giữ **marker** + **bản gốc mã hoá AES-256-GCM** (khoá `PII_ENCRYPTION_KEY` trong `.env`, không nằm trong DB), giao diện hiện **chuỗi giả cùng độ dài bị làm mờ** (CSS blur) — giá trị thật chỉ được gửi về trình duyệt khi chủ meeting bấm, mỗi lần bấm ghi vào `pii_reveals`. Bằng chứng (`safety_events`, `guard_turns`) và summary chỉ giữ nhãn (`[số điện thoại]`). Không ẩn tên / địa chỉ. Dữ liệu ở Stream: ngoài phạm vi. Trang quản trị vi phạm: **không làm**, sửa đồ án (mục 3.1.4) thành hướng phát triển.
+
+| Thành phần | File |
+|---|---|
+| Nhận dạng, gắn nhãn, mã hoá / giải mã | `src/lib/pii.ts` |
+| Định dạng marker (dùng chung server và giao diện) | `src/lib/pii-marker.ts` |
+| Ẩn trước khi ghi transcript | `src/lib/transcript-recorder.ts` (`transcript_items.pii`) |
+| Nhãn trong bằng chứng | `recordSafetyEvent`, `recordGuardTurn` |
+| Summary (model không thấy PII, kết quả lọc lại) | `src/inngest/functions.ts` |
+| Bấm để hiện + nhật ký | `meetings.revealPii`, bảng `pii_reveals` |
+| Ô che mờ | `src/modules/meetings/ui/components/pii-value.tsx` |
+
+**Tự kiểm:** `pii-check.ts` 16/16 (số điện thoại nhiều dạng, +84, email, CCCD, CMND, thẻ có Luhn, số tài khoản; không chạm năm, giá tiền, mã đơn, phương trình, số không qua Luhn; mã hoá / giải mã; bản mã bị sửa bị từ chối). `transcript-recorder-check.ts` 8/8 (số điện thoại không còn dạng rõ trong DB, giải mã đúng).
+
+**Vận hành:** mất `PII_ENCRYPTION_KEY` là mất giá trị gốc; khi deploy phải chép khoá. Thiếu khoá thì hệ thống chỉ gắn nhãn (không hiện được) và ghi cảnh báo.

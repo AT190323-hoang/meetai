@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { transcriptItems } from "@/db/schema";
+import { decryptPii } from "@/lib/pii";
 import { getRealtimeTranscript } from "@/lib/transcript";
 import { attachTranscriptRecorder } from "@/lib/transcript-recorder";
 
@@ -46,7 +47,12 @@ const LONG = "Lịch sử toán học bắt đầu từ thời cổ đại với
     emit("output_audio_buffer.started", { response_id: "r2" }); await wait(2000);
     done("r2", "cancelled", LONG);
 
-    // 4. A reply cancelled before any audio played: must not appear
+    // 4. The user reads out a phone number: it must not reach the DB in clear (src/lib/pii.ts)
+    emit("input_audio_buffer.speech_started"); await wait(400);
+    emit("input_audio_buffer.speech_stopped"); await wait(200);
+    emit("conversation.item.input_audio_transcription.completed", { transcript: "Số của tôi là 0354 099 123." });
+
+    // 5. A reply cancelled before any audio played: must not appear
     emit("response.created", { response: { id: "r3" } }); await wait(100);
     done("r3", "cancelled", "Câu này chưa được phát.");
 
@@ -63,6 +69,8 @@ const LONG = "Lịch sử toán học bắt đầu từ thời cổ đại với
         ["cancelled reply cut short and marked", rows.some((row) => row.interrupted && row.content.endsWith("…") && row.content.length < LONG.length)],
         ["unplayed reply not recorded", !rows.some((row) => row.content.includes("chưa được phát"))],
         ["lines in time order", transcript.every((item, i) => i === 0 || item.start_ts >= transcript[i - 1].start_ts)],
+        ["phone number not stored in clear", rows.every((row) => !row.content.includes("0354")) && rows.some((row) => /\[\[pii:[^\]]+:phone:12\]\]/.test(row.content))],
+        ["phone number recoverable with the key", rows.some((row) => row.pii !== null && decryptPii(row.pii)[0] === "0354 099 123")],
     ] as const;
     for (const [name, ok] of checks) console.log(ok ? "PASS" : "FAIL", name);
 

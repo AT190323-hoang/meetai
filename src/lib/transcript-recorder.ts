@@ -1,8 +1,11 @@
 import "server-only";
 import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 
+import { nanoid } from "nanoid";
+
 import { db } from "@/db";
 import { transcriptItems } from "@/db/schema";
+import { maskPii } from "@/lib/pii";
 
 // Agent speech rate used to estimate how much of an interrupted reply was heard, until the call's
 // own completed replies give a measured one (Vietnamese words are single syllables)
@@ -54,11 +57,14 @@ export function attachTranscriptRecorder(
     const on = <T,>(eventName: string, handler: (event: T) => void) =>
         client.realtime.on(eventName, (event) => handler(event as T));
 
-    const write = async (row: Omit<typeof transcriptItems.$inferInsert, "meetingId">) => {
+    const write = async (row: Omit<typeof transcriptItems.$inferInsert, "meetingId" | "id" | "pii">) => {
+        // Personal data never reaches the DB in clear: markers in the text, values encrypted
+        const id = nanoid();
+        const { content, encrypted } = maskPii(row.content, id);
         // One retry: transient connect timeouts to Neon were observed during calls
         for (let attempt = 1; attempt <= 2; attempt++) {
             try {
-                await db.insert(transcriptItems).values({ meetingId, ...row });
+                await db.insert(transcriptItems).values({ ...row, id, meetingId, content, pii: encrypted });
                 return;
             } catch (error) {
                 if (attempt === 2) {

@@ -9,6 +9,7 @@ import {
     detectJailbreakNemoGuard,
     type JailbreakResult,
 } from "@/lib/jailbreak";
+import { labelPii } from "@/lib/pii";
 import { detectVnPolicy, type VnPolicyResult } from "@/lib/vn-policy";
 import {
     categorySeverity,
@@ -163,7 +164,8 @@ export async function recordSafetyEvent({
             source,
             role,
             detector: "detector" in result ? result.detector : "content_safety",
-            content,
+            // Evidence keeps what was said, not the personal data in it
+            content: labelPii(content),
             unsafe,
             severity,
             categories: categoriesOf(result),
@@ -250,7 +252,7 @@ export function recordUserInputEvents(
 /** Stores one user turn's timing (guard_turns); returns its id, or null when the write fails. */
 export async function recordGuardTurn(turn: typeof guardTurns.$inferInsert) {
     try {
-        const [row] = await db.insert(guardTurns).values(turn).returning({ id: guardTurns.id });
+        const [row] = await db.insert(guardTurns).values({ ...turn, content: labelPii(turn.content) }).returning({ id: guardTurns.id });
         return row?.id ?? null;
     } catch (error) {
         console.error(`[safety] failed to record guard turn for meeting ${turn.meetingId}`, error);

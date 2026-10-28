@@ -6,6 +6,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
 import { SUMMARY_MODEL } from "@/lib/models";
+import { labelPii, markersToLabels } from "@/lib/pii";
 import { getRealtimeTranscript } from "@/lib/transcript";
 import { agentReplySeverity, checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
@@ -16,6 +17,7 @@ const summerizer = createAgent({
 
 Write the whole summary in Vietnamese, the language of the users, including the headings ("### Tổng quan" for Overview, "### Ghi chú" for Notes).
 The transcript comes from speech recognition, so some words may be mistranscribed. Infer the intended meaning from context, and never invent content that was not discussed.
+Never write personal data (phone numbers, emails, ID, card or account numbers) in the summary; personal data in the transcript is already replaced by labels such as [số điện thoại].
 
 Use the following markdown structure for every output:
 
@@ -53,7 +55,11 @@ export const meetingsProcessing = inngest.createFunction(
     });
 
     const transcript = await step.run("parse-transcript", async () => {
-      return fromStream ? JSONL.parse<StreamTranscriptItem>(response) : realtimeTranscript;
+      // The model never sees personal data: labels instead of values (src/lib/pii.ts)
+      return (fromStream ? JSONL.parse<StreamTranscriptItem>(response) : realtimeTranscript).map((item) => ({
+        ...item,
+        text: fromStream ? labelPii(item.text) : markersToLabels(item.text),
+      }));
     });
 
     const transcriptWithSpeakers = await step.run("add-speakers", async () => {
@@ -129,7 +135,8 @@ export const meetingsProcessing = inngest.createFunction(
       await db
         .update(meetings)
         .set({
-          summary: (output[0] as TextMessage).content as string,
+          // Labelled again in case the model still wrote a number
+          summary: labelPii((output[0] as TextMessage).content as string),
           status: "completed",
         })
         .where(eq(meetings.id, event.data.meetingId))

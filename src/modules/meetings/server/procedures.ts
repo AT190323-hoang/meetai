@@ -1,6 +1,6 @@
 import { user } from './../../../db/schema';
 import JSONL from 'jsonl-parse-stringify';
-import { agents, meetings, safetyEvents } from '@/db/schema';
+import { agents, meetings, piiReveals, safetyEvents, transcriptItems } from '@/db/schema';
 import { db } from '@/db';
 import { createTRPCRouter, premiumProcedure, protectedProcedure } from '@/trpc/init';
 import { z } from "zod";
@@ -15,6 +15,7 @@ import { generateAvatarUri } from '@/lib/avatar';
 import { streamChat } from '@/lib/stream-chat';
 import { getFlagCause } from '@/lib/safety-events';
 import { getRealtimeTranscript } from "@/lib/transcript";
+import { decryptPii } from "@/lib/pii";
 
 // A flagged meeting stays hidden from its owner until they acknowledge the warning (decision A5)
 const isQuarantined = (meeting: { safetyStatus: string; safetyAcknowledgedAt: Date | null }) =>
@@ -61,6 +62,40 @@ export const meetingsRouter = createTRPCRouter({
             await channel.addMembers([ctx.auth.user.id]);
 
             return { channelId: existingMeeting.id };
+        }),
+
+    // Masked personal data in the Vietnamese transcript, shown only to the owner of a meeting that is
+    // not quarantined; every reveal is logged (pii_reveals)
+    revealPii: protectedProcedure
+        .input(z.object({ meetingId: z.string(), itemId: z.string(), index: z.number().int().min(0) }))
+        .mutation(async ({ input, ctx }) => {
+            const [existingMeeting] = await db
+                .select()
+                .from(meetings)
+                .where(and(eq(meetings.id, input.meetingId), eq(meetings.userId, ctx.auth.user.id)));
+            if (!existingMeeting) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Meeting not found" });
+            }
+            if (isQuarantined(existingMeeting)) {
+                throw new TRPCError({ code: "FORBIDDEN", message: "Acknowledge the safety warning first" });
+            }
+
+            const [item] = await db
+                .select({ pii: transcriptItems.pii })
+                .from(transcriptItems)
+                .where(and(eq(transcriptItems.id, input.itemId), eq(transcriptItems.meetingId, existingMeeting.id)));
+            const value = item?.pii ? decryptPii(item.pii)[input.index] : undefined;
+            if (value === undefined) {
+                throw new TRPCError({ code: "NOT_FOUND", message: "Nothing to reveal" });
+            }
+
+            await db.insert(piiReveals).values({
+                meetingId: existingMeeting.id,
+                transcriptItemId: input.itemId,
+                valueIndex: input.index,
+                userId: ctx.auth.user.id,
+            });
+            return { value };
         }),
 
     getTranscript: protectedProcedure

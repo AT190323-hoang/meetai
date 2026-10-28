@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { generateAvatarUri } from "@/lib/avatar";
+import { splitPii } from "@/lib/pii-marker";
+
+import { PiiValue } from "./pii-value";
 
 interface Props {
     meetingId: string;
@@ -19,8 +22,13 @@ export const Transcript = ({ meetingId }: Props) => {
     const { data } = useQuery(trpc.meetings.getTranscript.queryOptions({ id: meetingId }))
 
     const [searchQuery, setSearchQuery] = useState("");
+    // Search only the readable text: masked personal data is not searchable
     const filteredData = (data ?? []).filter((item) =>
-        item.text.toString().toLowerCase().includes(searchQuery.toLowerCase())
+        splitPii(item.text.toString())
+            .map((part) => (part.kind === "text" ? part.text : ""))
+            .join("")
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -59,13 +67,19 @@ export const Transcript = ({ meetingId }: Props) => {
                                         )}
                                     </p>
                                 </div>
-                                <Highlighter
-                                    className="text-sm text-neutral-700"
-                                    highlightClassName="bg-yellow-200"
-                                    searchWords={[searchQuery]}
-                                    autoEscape={true}
-                                    textToHighlight={item.text}
-                                />
+                                <p className="text-sm text-neutral-700">
+                                    {splitPii(item.text).map((part, i) => part.kind === "text" ? (
+                                        <Highlighter
+                                            key={i}
+                                            highlightClassName="bg-yellow-200"
+                                            searchWords={[searchQuery]}
+                                            autoEscape={true}
+                                            textToHighlight={part.text}
+                                        />
+                                    ) : (
+                                        <PiiValue key={i} meetingId={meetingId} {...part} />
+                                    ))}
+                                </p>
                             </div>
                         )
                     })}

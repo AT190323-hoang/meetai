@@ -23,6 +23,7 @@ node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/<tên>.mjs
 | `transcript-recorder-check.ts` | Tự kiểm module ghi transcript tiếng Việt: phát lại sự kiện thật trên client giả, ghi vào một meeting cũ rồi xoá (không gọi API trả phí) | 6/6 đạt. Xem `docs/khao-sat/vn-transcript.md` |
 | `agent-reconnect-check.ts` | Agent bị ngắt kết nối có tự nối lại không, và không nối lại sau khi cuộc gọi kết thúc (meeting + cuộc gọi tạm, xoá sau; gây ngắt bằng một lệnh server từ chối) | 28/10: 3/3 đạt, nối lại sau ~1 s |
 | `stt-compare.mjs` | So sánh model chép lời tiếng Việt (có / không gợi ý ngữ cảnh) trên giọng TTS sạch và có nhiễu: tỷ lệ sai từ, chữ nước ngoài, mất từ khoá an toàn (≈0,05 USD) | 28/10: `gpt-transcribe` 0,9% / 0 / 0 so với `gpt-4o-mini-transcribe` 17,1% / 3 / 4. Xem `docs/khao-sat/stt.md` |
+| `pii-check.ts` | Tự kiểm nhận dạng / gắn nhãn / mã hoá PII (không gọi API) | 29/10: 16/16 |
 | `s6-multiturn.mjs` | Đưa cả chuỗi hội thoại vào Nemotron: có giúp không, có "dính cờ" không | 12/16; dính cờ 2/2, báo nhầm câu hỗ trợ của agent |
 
 Chi tiết và kết luận: [docs/safety-guard.md](../../docs/safety-guard.md) mục 9.

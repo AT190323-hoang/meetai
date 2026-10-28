@@ -7,6 +7,7 @@ import { REALTIME_MODEL, TRANSCRIPTION_MODEL } from "@/lib/models";
 import { attachRealtimeGuard, type GuardMode } from "@/lib/realtime-guard";
 import { hasCareSignal } from "@/lib/safety-events";
 import { streamVideo } from "@/lib/stream-video";
+import { markersToLabels } from "@/lib/pii";
 import { getRealtimeTranscript } from "@/lib/transcript";
 import { attachTranscriptRecorder } from "@/lib/transcript-recorder";
 import { withVnPositionNote } from "@/lib/vn-policy";
@@ -72,7 +73,7 @@ export async function startAgentSession(session: AgentSession, reconnect = false
     if (reconnect) {
         const transcript = await getRealtimeTranscript(meetingId).catch(() => []);
         const lines = transcript.slice(-RESUME_CONTEXT_LINES).map((item) =>
-            `${item.speaker_id === agent.id ? agent.name : "User"}: ${item.text}`);
+            `${item.speaker_id === agent.id ? agent.name : "User"}: ${markersToLabels(item.text)}`);
         if (lines.length > 0) {
             instructions = `${instructions}\n\n${resumeNote(lines)}`;
         }

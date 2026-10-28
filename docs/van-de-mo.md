@@ -60,7 +60,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [x] (28/10: hết sau khi đổi sang `gpt-5.6-luna` — câu "chế tạo bom" (N2 trong `classifier-model-compare.mjs`) đúng "không phải jailbreak" 9/9 lượt; không cần sửa prompt) Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
 - [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI). **Đề xuất 28/10, chờ duyệt:** `de-xuat/2026-10-28-thuc-nghiem-chuong-3.md`.
 - [x] **Agent rớt kết nối không còn kết thúc cả cuộc gọi** (28/10, gộp `29-finish`): chỉ người dùng rời đi mới kết thúc; agent rớt thì nối lại với transcript gần nhất làm ngữ cảnh; guard không gửi lệnh khi mất kết nối. Kiểm chứng bằng `agent-reconnect-check.ts` (3/3).
-- [ ] Ẩn danh PII trước khi lưu (mục 4.5 đề cương; đồ án mục 3.1.4 còn nhắc trang quản trị vi phạm). **Đề xuất 28/10, chờ quyết:** `de-xuat/2026-10-28-an-danh-pii.md`.
+- [~] **Làm 29/10 (phương án C), chờ test gộp.** Ẩn danh PII trước khi lưu (mục 4.5 đề cương; đồ án mục 3.1.4 còn nhắc trang quản trị vi phạm). **Đề xuất 28/10, chờ quyết:** `de-xuat/2026-10-28-an-danh-pii.md`.
 
 ## C. Việc cần làm ngay về vận hành
 

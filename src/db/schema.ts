@@ -160,6 +160,22 @@ export const transcriptItems = pgTable("transcript_items", {
   endMs: integer("end_ms").notNull(),
   // An agent reply cut off before it finished; its text is cut to the estimated part that was heard
   interrupted: boolean("interrupted").notNull().default(false),
+  // Personal data found in the line, encrypted (src/lib/pii.ts); `content` holds a marker per value
+  pii: text("pii"),
+  createAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+/** Who revealed which masked personal data and when (audit trail for meetings.revealPii). */
+export const piiReveals = pgTable("pii_reveals", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  meetingId: text("meeting_id")
+    .notNull()
+    .references(() => meetings.id, { onDelete: 'cascade' }),
+  transcriptItemId: text("transcript_item_id").notNull(),
+  valueIndex: integer("value_index").notNull(),
+  userId: text("user_id").notNull(),
   createAt: timestamp("created_at").notNull().defaultNow(),
 });
 

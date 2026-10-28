@@ -27,6 +27,16 @@ Khảo sát: `khao-sat/vn-transcript.md`. Dùng luôn cuộc gọi của mục 1
 - [ ] **Summary** viết đúng nội dung (không còn kiểu "Tick Fun").
 - [ ] Meeting cũ (trước 28/10) vẫn hiện transcript của Stream như trước.
 
+### 5. Sau khi nâng thư viện (28/10, `khao-sat/npm-audit.md`)
+`better-auth` 1.2 → 1.7, `next` 15.3 → 15.5, `drizzle-orm` 0.43 → 0.45.
+- [ ] Đăng xuất rồi đăng nhập lại bằng **email**, **GitHub**, **Google**.
+- [ ] Đăng ký tài khoản mới (email) → vào được trang meetings.
+- [ ] Mở trang **Upgrade** (Polar) → hiện các gói; bấm nâng cấp tới trang thanh toán sandbox (không cần trả).
+- [ ] Tạo agent, tạo meeting, danh sách/lọc/tìm kiếm meetings vẫn chạy.
+
+### 6. Agent tự nối lại khi rớt mạng (28/10)
+- [ ] Không cần làm gì riêng: nếu trong lúc test agent có lúc im rồi nói tiếp, log có `connection dropped, reconnecting` và cuộc gọi **không** bị kết thúc. Script `agent-reconnect-check.ts` đã kiểm 3/3.
+
 ### Sau khi test xong
 - [ ] Xóa `SAFETY_WARN_AT`, `SAFETY_KILL_AT` (và `REALTIME_MODEL` nếu đã đặt) khỏi `.env`.
 

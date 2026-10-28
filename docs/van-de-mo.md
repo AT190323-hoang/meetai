@@ -68,7 +68,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [ ] **Đổi webhook Stream về Vercel** sau khi test (`https://meetai-pi-nine.vercel.app/api/webhook`).
 - [ ] Bản Vercel đang chạy code cũ có lỗi: `ws` bufferutil, giao thức beta (`session.type`), VAD tắt → agent không nhận instructions. Cần deploy code mới (và vẫn còn vấn đề A3).
 - [x] ~~Commit các thay đổi hiện tại~~ — đã commit 20/10 trên `29-finish` và đã push lên `origin/29-finish` (chưa merge `main` vì merge sẽ tự deploy production trên Vercel). File `.docx`/`.pdf` đồ án được đưa vào `.gitignore` (repo công khai); quản lý phiên bản bằng Google Drive/OneDrive.
-- [ ] `npm audit` còn báo một số lỗ hổng trong dependency — chưa xử lý.
+- [x] `npm audit` (28/10): 90 → 46 lỗ hổng, **0 nghiêm trọng** (còn 9 cao trong `inngest`/`zod`/`opentelemetry`/`postcss`, có lý do giữ). Chi tiết `khao-sat/npm-audit.md`. Đăng nhập / thanh toán với `better-auth` 1.7 chờ test gộp.
 - [ ] Đồ án: thêm phần lỗ hổng phân quyền Stream và bảng kiểm chứng (`khao-sat/stream-auth.md`); mục "Stream token ràng buộc call_id" giờ đã đúng với code.
 
 ## D. Tài liệu đồ án

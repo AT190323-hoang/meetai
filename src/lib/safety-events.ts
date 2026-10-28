@@ -94,6 +94,21 @@ export async function checkAgentReply(query: string, reply: string) {
     };
 }
 
+/**
+ * Policy tier to act on for an agent reply verdict. When the user's message it answers was itself
+ * blocked, the guard already refuses, and a content-safety "block" on the reply is almost always
+ * its opening line before the refusal ("I understand your question, let me explain...") read
+ * against the harmful request (docs/khao-sat/agent-false-positive.md): it is only logged, so the
+ * reply is not cut twice and the meeting is not flagged as the agent's fault.
+ */
+export function agentReplySeverity(result: GuardResult, userBlocked: boolean): Severity | null {
+    const severity = severityOf(result, "agent");
+    if (userBlocked && severity === "block" && !isJailbreakResult(result) && !isVnPolicyResult(result)) {
+        return "log";
+    }
+    return severity;
+}
+
 /** Category labels stored in safety_events for a verdict. */
 function categoriesOf(result: GuardResult) {
     if (isJailbreakResult(result)) {
@@ -119,6 +134,7 @@ export async function recordSafetyEvent({
     content,
     result,
     caughtInTime,
+    severity: severityOverride,
 }: {
     meetingId: string;
     source: "realtime" | "chat" | "post_call";
@@ -126,9 +142,11 @@ export async function recordSafetyEvent({
     content: string;
     result: GuardResult;
     caughtInTime?: boolean;
+    // The tier actually applied, when it differs from the verdict's own (see agentReplySeverity)
+    severity?: Severity | null;
 }) {
     const unsafe = isUnsafe(result, role);
-    const severity = severityOf(result, role);
+    const severity = severityOverride !== undefined ? severityOverride : severityOf(result, role);
 
     // One retry per write: transient connect timeouts to Neon were observed during calls
     const withRetry = async (write: () => Promise<unknown>) => {

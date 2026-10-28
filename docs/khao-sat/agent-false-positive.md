@@ -1,6 +1,6 @@
 # Khảo sát: guard chặn nhầm câu của agent trong cuộc gọi
 
-> Ngày: 28/10/2026. Trạng thái: **khảo sát xong, chờ duyệt cách sửa**. Script: `scripts/thuc-nghiem/agent-pair-check.mjs` (chỉ gọi Nemotron).
+> Ngày: 28/10/2026. Trạng thái: **người dùng duyệt A + B ngày 28/10; đã code trên `feat/agent-false-positive`, chờ gọi kiểm chứng**. Script: `scripts/thuc-nghiem/agent-pair-check.mjs` (chỉ gọi Nemotron).
 
 ## 1. Hiện tượng
 
@@ -41,3 +41,11 @@ Tổng: ghép cặp 27/30 đúng, đứng riêng 27/30 đúng; cả hai không b
 - Meeting vẫn bị gắn cờ, nhưng đúng nguyên nhân: do người dùng.
 
 **Không chọn:** kiểm câu agent đứng riêng (chặn nhầm lời từ chối, F4); chờ hết câu trả lời rồi mới kiểm (câu có hại đã phát xong).
+
+## 5. Đã làm (28/10)
+
+- `src/lib/realtime-guard.ts`: mỗi câu trả lời giữ lượt người dùng nó trả lời (`response.created`); kiểm câu agent ghép với bản chép lời của đúng lượt đó (chờ tối đa 5 s nếu ở shadow câu trả lời có trước bản chép lời).
+- `agentReplySeverity` (`src/lib/safety-events.ts`): lượt người dùng đã BLOCK → BLOCK `content_safety` của câu agent thành `log`. Nếu kết luận của câu người dùng về sau câu agent, guard vẫn hành động ngay theo những gì đã biết, chỉ cách **ghi** sự kiện được điều chỉnh khi kết luận về (chờ tối đa 30 s).
+- Kiểm duyệt hậu kỳ (`src/inngest/functions.ts`) áp dụng cùng quy tắc (ca "This is the last warning…" ngày 27/10).
+- `jailbreak_llm` và `vn_policy` không đổi.
+

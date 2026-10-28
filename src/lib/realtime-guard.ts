@@ -30,6 +30,8 @@ const SENTENCE_END = /[.!?…]\s*$/;
 const MIN_CHUNK_LENGTH = 40;
 // The call is ended after the closing line is spoken, or after this long if it never completes
 const KILL_FALLBACK_MS = 15_000;
+// Ending the call is retried: a failed call.end() left the call running after the kill-switch
+const END_CALL_ATTEMPTS = 3;
 // Strict mode: longest the agent waits for the guard before answering anyway (A2 survey)
 const STRICT_TIMEOUT_MS = Number(process.env.GUARD_STRICT_TIMEOUT_MS ?? 2000);
 
@@ -38,6 +40,8 @@ type TurnDecision = "shadow" | "safe" | "care" | "block" | "timeout";
 
 /** One user utterance, from the end of speech to the agent's first words. */
 interface Turn {
+    // Order of the user's utterances; a response answers every utterance committed before it
+    seq: number;
     speechStoppedAt: number | null;
     responseStartMs: number | null;
     rowId: Promise<string | null> | null;
@@ -90,6 +94,10 @@ export function attachRealtimeGuard(
     let userSpeaking = false;
     let answerOwed = false;
     let currentTurn: Turn | null = null;
+    let turnSeq = 0;
+    // Latest utterance a response has already covered: fragments of one sentence that are cleared
+    // together (e.g. after a slow guard) must not get one answer each
+    let answeredSeq = 0;
     // Guard notes are appended to the agent's instructions instead of replacing them
     let sessionInstructions = instructions;
     let refusalNote = REFUSAL_NOTE;
@@ -159,8 +167,8 @@ export function attachRealtimeGuard(
     };
 
     // Strict: lets the agent answer the user's turn (the session no longer does it by itself)
-    const release = () => {
-        if (killed) {
+    const release = (seq = turnSeq) => {
+        if (killed || seq <= answeredSeq) {
             return;
         }
         if (userSpeaking) {
@@ -189,13 +197,24 @@ export function attachRealtimeGuard(
         log("support mode enabled");
     };
 
-    const endCallOnce = () => {
+    const endCallOnce = async () => {
         if (callEnded) {
             return;
         }
         callEnded = true;
         log("kill-switch: ending the call");
-        endCall().catch((error) => log(`kill-switch: failed to end the call: ${error}`));
+        for (let attempt = 1; attempt <= END_CALL_ATTEMPTS; attempt++) {
+            try {
+                await endCall();
+                return;
+            } catch (error) {
+                log(`kill-switch: failed to end the call (attempt ${attempt}/${END_CALL_ATTEMPTS}): ${error}`);
+            }
+        }
+        // Last resort: the agent leaves, so at least nothing more is said; the owner's leaving then
+        // ends the call through the session_participant_left webhook
+        log("kill-switch: could not end the call, disconnecting the agent");
+        client.disconnect();
     };
 
     // The agent says a closing line first; the call ends on that response's `response.done`
@@ -207,7 +226,7 @@ export function attachRealtimeGuard(
         } else if (!pendingRefusal) {
             refuse(KILL_NOTE);
         }
-        setTimeout(endCallOnce, KILL_FALLBACK_MS);
+        setTimeout(() => void endCallOnce(), KILL_FALLBACK_MS);
     };
 
     const noteForBlockedTurn = (count: number) => {
@@ -230,12 +249,14 @@ export function attachRealtimeGuard(
 
     on("server.response.created", (event: { response: { id: string } }) => {
         activeResponseId = event.response.id;
+        answeredSeq = turnSeq;
         if (mode === "strict" && !responseRequested && !pendingRefusal) {
             log("strict: the session started a response by itself (create_response: false was not applied)");
         }
         responseRequested = false;
-        // A refusal came in while this response was only requested
-        if (refusalQueued && !pendingRefusal) {
+        // A refusal came in while this response was only requested; after the kill-switch only the
+        // closing line may be spoken, whoever started the response
+        if ((refusalQueued || killed) && !pendingRefusal) {
             client.realtime.send("response.cancel", {});
         }
         responses.set(event.response.id, {
@@ -271,7 +292,7 @@ export function attachRealtimeGuard(
                 release();
             }
             if (state?.isClosing) {
-                endCallOnce();
+                void endCallOnce();
             }
         }
     );
@@ -282,7 +303,7 @@ export function attachRealtimeGuard(
 
     on("server.input_audio_buffer.speech_stopped", () => {
         userSpeaking = false;
-        currentTurn = { speechStoppedAt: performance.now(), responseStartMs: null, rowId: null };
+        currentTurn = { seq: ++turnSeq, speechStoppedAt: performance.now(), responseStartMs: null, rowId: null };
     });
 
     // The agent's first words for the latest user turn (any response, refusals included)
@@ -332,7 +353,7 @@ export function attachRealtimeGuard(
                 return;
             }
             lastUserText = transcript;
-            const turn: Turn = currentTurn ?? { speechStoppedAt: null, responseStartMs: null, rowId: null };
+            const turn: Turn = currentTurn ?? { seq: turnSeq, speechStoppedAt: null, responseStartMs: null, rowId: null };
             const transcribedAt = performance.now();
 
             // Shadow has nothing to decide: the agent is already answering
@@ -344,7 +365,7 @@ export function attachRealtimeGuard(
                     }
                     decision = "timeout";
                     log(`strict: no verdict within ${STRICT_TIMEOUT_MS} ms, the agent answers and the guard goes on as shadow "${transcript}"`);
-                    release();
+                    release(turn.seq);
                 }, STRICT_TIMEOUT_MS)
                 : undefined;
 
@@ -385,7 +406,7 @@ export function attachRealtimeGuard(
                         // Set before the answer, so the first reply is already supportive
                         enableSupportMode();
                     }
-                    release();
+                    release(turn.seq);
                 }
             } else if (finalDecision === "block") {
                 log(`strict: full verdict of the refused turn after ${guardMs} ms`, results);

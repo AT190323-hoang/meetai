@@ -14,10 +14,11 @@ Chi tiết trong [de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](de-xuat/202
 - Một chính sách chung trong `src/lib/safety-policy.ts`; thêm cột `severity`.
 - Thứ tự làm: phân mức → kill-switch/cách ly → `vn_policy` → thực nghiệm.
 
-### A2. Shadow hay strict mode (**hướng đã chốt 21/10, đang khảo sát**)
+### A2. Shadow hay strict mode (**đã chốt 28/10: strict có giới hạn thời gian**)
+- **Quyết định 28/10:** sản phẩm chạy **strict, T = 2 s** (quá T thì agent trả lời và guard chạy tiếp như shadow). Lý do: 2 cuộc gọi so sánh cùng bộ câu — strict hết lời từ chối lặp / lời an ủi tới muộn, độ trễ (p50 3,1 s trên máy dev, ~1,6–2,9 s khi mạng không nghẽn) người dùng thấy chấp nhận được. Số liệu: [khao-sat/a2-shadow-vs-strict.md](khao-sat/a2-shadow-vs-strict.md) mục 8. Đề xuất: [de-xuat/2026-10-28-chot-strict-mode.md](de-xuat/2026-10-28-chot-strict-mode.md).
 - Sản phẩm chạy **một chế độ guard cố định** do hệ thống quyết định: shadow (song song, hiện tại) **hoặc** strict (chặn trước khi agent trả lời). **Không** cho người dùng hay từng agent tự chọn, vì như vậy là giao quyết định về mức an toàn cho người có thể lạm dụng.
 - Chọn chế độ nào: **khảo sát rồi thống nhất**. Kết quả phần không cần gọi điện: [khao-sat/a2-shadow-vs-strict.md](khao-sat/a2-shadow-vs-strict.md). Shadow chỉ cắt kịp khoảng 5/9 lượt; ứng viên mạnh là **strict có giới hạn thời gian** (quá T giây thì quay về shadow). Còn cần cuộc gọi thật (mục 5 của khảo sát).
-- Biến môi trường `REALTIME_GUARD=off|shadow|strict` chỉ để **người vận hành chạy thực nghiệm** Chương 3 (so sánh 3 cấu hình), không phải tùy chọn sản phẩm.
+- Mặc định là strict. Biến môi trường `REALTIME_GUARD=off|shadow` chỉ để **người vận hành chạy thực nghiệm** Chương 3 (so sánh 3 cấu hình), không phải tùy chọn sản phẩm.
 - Làm sau chính sách phân mức và kill-switch (strict dựa vào bảng mức A1: chỉ chặn trước câu người dùng ở mức chặn; câu agent vẫn kiểm song song).
 
 ### A4. Ngữ cảnh nhiều lượt (**đã chốt 21/10**)

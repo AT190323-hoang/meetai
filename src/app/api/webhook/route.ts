@@ -152,11 +152,10 @@ export async function POST(req: NextRequest) {
             model: REALTIME_MODEL,
         });
 
-        // REALTIME_GUARD is for experiments only (A2: the product runs one fixed mode):
-        // "off" runs the agent without the guard (baseline), "strict" checks each user turn before
-        // the agent answers, anything else is shadow mode
+        // The product runs strict mode (decision A2, 28/10). REALTIME_GUARD is for experiments only:
+        // "off" runs the agent without the guard (baseline), "shadow" checks in parallel instead
         const guardEnabled = process.env.REALTIME_GUARD !== "off";
-        const guardMode: GuardMode = process.env.REALTIME_GUARD === "strict" ? "strict" : "shadow";
+        const guardMode: GuardMode = process.env.REALTIME_GUARD === "shadow" ? "shadow" : "strict";
         // System-level guidance every agent gets; users cannot remove it
         const instructions = withVnPositionNote(existingAgent.instructions);
 

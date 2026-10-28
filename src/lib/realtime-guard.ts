@@ -6,8 +6,10 @@ import {
     checkUserInput,
     incrementBlockedTurns,
     isVnPolicyResult,
+    recordGuardTurn,
     recordSafetyEvent,
     recordUserInputEvents,
+    setGuardTurnResponseStart,
     severityOf,
     type GuardResult,
 } from "@/lib/safety-events";
@@ -28,6 +30,18 @@ const SENTENCE_END = /[.!?…]\s*$/;
 const MIN_CHUNK_LENGTH = 40;
 // The call is ended after the closing line is spoken, or after this long if it never completes
 const KILL_FALLBACK_MS = 15_000;
+// Strict mode: longest the agent waits for the guard before answering anyway (A2 survey)
+const STRICT_TIMEOUT_MS = Number(process.env.GUARD_STRICT_TIMEOUT_MS ?? 2000);
+
+export type GuardMode = "shadow" | "strict";
+type TurnDecision = "shadow" | "safe" | "care" | "block" | "timeout";
+
+/** One user utterance, from the end of speech to the agent's first words. */
+interface Turn {
+    speechStoppedAt: number | null;
+    responseStartMs: number | null;
+    rowId: Promise<string | null> | null;
+}
 
 interface ResponseState {
     text: string;
@@ -41,11 +55,17 @@ interface ResponseState {
 }
 
 /**
- * Shadow guard for the OpenAI Realtime agent: user and agent transcripts are classified by
- * Nemotron in parallel with the conversation (no added latency). Verdicts are acted on by
- * policy tier (src/lib/safety-policy.ts): "block" cancels the in-flight response and makes the
- * agent refuse, "care" switches the session to a supportive mode once, "log" only records.
- * Blocked user turns escalate: a warning, a final warning, then the kill-switch ends the call.
+ * Guard for the OpenAI Realtime agent. Verdicts are acted on by policy tier
+ * (src/lib/safety-policy.ts): "block" makes the agent refuse, "care" switches the session to a
+ * supportive mode once, "log" only records. Blocked user turns escalate: a warning, a final
+ * warning, then the kill-switch ends the call.
+ *
+ * - shadow: the agent answers at once and the guard classifies in parallel; a "block" verdict
+ *   cancels the in-flight response.
+ * - strict: the session does not answer by itself (`create_response: false`). Each user turn is
+ *   checked first: the first "block" verdict refuses at once, a cleared turn is answered, and after
+ *   STRICT_TIMEOUT_MS the agent answers anyway while the guard goes on as in shadow mode.
+ * Agent replies are checked in parallel in both modes (they are not known in advance).
  */
 export function attachRealtimeGuard(
     client: RealtimeClient,
@@ -53,13 +73,23 @@ export function attachRealtimeGuard(
         meetingId,
         instructions,
         endCall,
-    }: { meetingId: string; instructions: string; endCall: () => Promise<unknown> }
+        mode,
+    }: { meetingId: string; instructions: string; endCall: () => Promise<unknown>; mode: GuardMode }
 ) {
     const responses = new Map<string, ResponseState>();
     let activeResponseId: string | null = null;
     let lastUserText = "";
     let pendingRefusal = false;
     let refusalQueued = false;
+    // A response.create was sent and its response.created has not arrived yet
+    let responseRequested = false;
+    // Strict: a cleared turn waits for the agent to finish its current response
+    let releaseQueued = false;
+    // Strict: server VAD often splits one sentence at a pause, so a turn is not answered while the
+    // user is already speaking again; the answer is owed to the next turn instead
+    let userSpeaking = false;
+    let answerOwed = false;
+    let currentTurn: Turn | null = null;
     // Guard notes are appended to the agent's instructions instead of replacing them
     let sessionInstructions = instructions;
     let refusalNote = REFUSAL_NOTE;
@@ -99,6 +129,9 @@ export function attachRealtimeGuard(
 
     const sendRefusal = () => {
         pendingRefusal = true;
+        responseRequested = true;
+        // The refusal is the answer to what the user said
+        answerOwed = false;
         client.realtime.send("response.create", {
             response: { instructions: `${sessionInstructions}\n\n${refusalNote}` },
         });
@@ -106,20 +139,41 @@ export function attachRealtimeGuard(
 
     // Any server `error` event makes the Stream realtime wrapper disconnect the agent, so:
     // - never send `response.cancel` without an active response
-    // - never send `response.create` while a response is still active (cancel is async and
-    //   only completes on `response.done`), so the refusal is queued until then
+    // - never send `response.create` while a response is still active or requested (cancel is
+    //   async and only completes on `response.done`), so the refusal is queued until then
     const refuse = (note: string) => {
         // After the kill-switch only the closing line may be spoken
         if (pendingRefusal || refusalQueued || (killed && note !== KILL_NOTE)) {
             return;
         }
         refusalNote = note;
-        if (activeResponseId) {
+        if (activeResponseId || responseRequested) {
             refusalQueued = true;
-            client.realtime.send("response.cancel", {});
+            // A response that is only requested is cancelled once it is created
+            if (activeResponseId) {
+                client.realtime.send("response.cancel", {});
+            }
             return;
         }
         sendRefusal();
+    };
+
+    // Strict: lets the agent answer the user's turn (the session no longer does it by itself)
+    const release = () => {
+        if (killed) {
+            return;
+        }
+        if (userSpeaking) {
+            answerOwed = true;
+            return;
+        }
+        answerOwed = false;
+        if (activeResponseId || responseRequested || refusalQueued || pendingRefusal) {
+            releaseQueued = true;
+            return;
+        }
+        responseRequested = true;
+        client.realtime.send("response.create", {});
     };
 
     // A persistent session instruction (not a per-turn command) keeps the conversation natural
@@ -176,6 +230,14 @@ export function attachRealtimeGuard(
 
     on("server.response.created", (event: { response: { id: string } }) => {
         activeResponseId = event.response.id;
+        if (mode === "strict" && !responseRequested && !pendingRefusal) {
+            log("strict: the session started a response by itself (create_response: false was not applied)");
+        }
+        responseRequested = false;
+        // A refusal came in while this response was only requested
+        if (refusalQueued && !pendingRefusal) {
+            client.realtime.send("response.cancel", {});
+        }
         responses.set(event.response.id, {
             text: "",
             checkedLength: 0,
@@ -204,6 +266,9 @@ export function attachRealtimeGuard(
             if (refusalQueued && !activeResponseId) {
                 refusalQueued = false;
                 sendRefusal();
+            } else if (releaseQueued && !activeResponseId) {
+                releaseQueued = false;
+                release();
             }
             if (state?.isClosing) {
                 endCallOnce();
@@ -211,54 +276,149 @@ export function attachRealtimeGuard(
         }
     );
 
+    on("server.input_audio_buffer.speech_started", () => {
+        userSpeaking = true;
+    });
+
+    on("server.input_audio_buffer.speech_stopped", () => {
+        userSpeaking = false;
+        currentTurn = { speechStoppedAt: performance.now(), responseStartMs: null, rowId: null };
+    });
+
+    // The agent's first words for the latest user turn (any response, refusals included)
+    const markResponseStart = () => {
+        const turn = currentTurn;
+        if (!turn || turn.speechStoppedAt === null || turn.responseStartMs !== null) {
+            return;
+        }
+        const responseStartMs = Math.round(performance.now() - turn.speechStoppedAt);
+        turn.responseStartMs = responseStartMs;
+        void turn.rowId?.then((id) => {
+            if (id) {
+                void setGuardTurnResponseStart(id, responseStartMs);
+            }
+        });
+    };
+
+    const onBlockedTurn = async (transcript: string, results: GuardResult[]) => {
+        if (killed) {
+            log(`user turn BLOCK after kill-switch, ignored "${transcript}"`, results);
+            return;
+        }
+
+        // Counted per user turn, not per detector (decision A5)
+        blockedTurns = (await incrementBlockedTurns(meetingId)) ?? blockedTurns + 1;
+        log(
+            `user turn BLOCK #${blockedTurns}/${SAFETY_KILL_AT} (agent responding: ${activeResponseId !== null}) "${transcript}"`,
+            results
+        );
+
+        if (blockedTurns >= SAFETY_KILL_AT) {
+            kill();
+            return;
+        }
+        refuse(noteForBlockedTurn(blockedTurns));
+    };
+
     on(
         "server.conversation.item.input_audio_transcription.completed",
         async (event: { transcript: string }) => {
             const transcript = event.transcript?.trim();
+            // An empty transcript is usually noise: strict mode only answers a turn it still owes
             if (!transcript) {
+                if (mode === "strict" && answerOwed) {
+                    release();
+                }
                 return;
             }
             lastUserText = transcript;
+            const turn: Turn = currentTurn ?? { speechStoppedAt: null, responseStartMs: null, rowId: null };
+            const transcribedAt = performance.now();
 
-            const { results, severity } = await checkUserInput(transcript);
+            // Shadow has nothing to decide: the agent is already answering
+            let decision: TurnDecision | null = mode === "shadow" ? "shadow" : null;
+            const timer = mode === "strict"
+                ? setTimeout(() => {
+                    if (decision !== null) {
+                        return;
+                    }
+                    decision = "timeout";
+                    log(`strict: no verdict within ${STRICT_TIMEOUT_MS} ms, the agent answers and the guard goes on as shadow "${transcript}"`);
+                    release();
+                }, STRICT_TIMEOUT_MS)
+                : undefined;
+
+            const { results, severity } = await checkUserInput(transcript, (result) => {
+                // Strict: refuse on the first "block" without waiting for the slower detectors
+                if (decision !== null || severityOf(result, "user") !== "block") {
+                    return;
+                }
+                decision = "block";
+                clearTimeout(timer);
+                void onBlockedTurn(transcript, [result]);
+            });
+            clearTimeout(timer);
+            const guardMs = Math.round(performance.now() - transcribedAt);
+
+            // Read through a function: TypeScript narrows `decision` as if the callbacks never ran
+            const decided = (): TurnDecision | null => decision;
+
+            // Whether the guard acted before the agent spoke: shadow can only cut an answer in flight
+            const caughtInTime = mode === "shadow"
+                ? activeResponseId !== null
+                : decided() === null || decided() === "block";
             void recordUserInputEvents(
-                {
-                    meetingId,
-                    source: "realtime",
-                    content: transcript,
-                    caughtInTime: activeResponseId !== null,
-                },
+                { meetingId, source: "realtime", content: transcript, caughtInTime },
                 results
             );
-            if (!severity || severity === "log") {
+
+            let finalDecision = decided();
+            if (finalDecision === null) {
+                // Strict, and every detector answered before the timeout
+                finalDecision = severity === "block" ? "block" : severity === "care" ? "care" : "safe";
+                decision = finalDecision;
+                if (severity === "block") {
+                    void onBlockedTurn(transcript, results);
+                } else {
+                    log(`strict: user turn ${severity === "care" ? `CARE "${transcript}"` : severity === "log" ? "logged" : "safe"} after ${guardMs} ms`, results);
+                    if (severity === "care") {
+                        // Set before the answer, so the first reply is already supportive
+                        enableSupportMode();
+                    }
+                    release();
+                }
+            } else if (finalDecision === "block") {
+                log(`strict: full verdict of the refused turn after ${guardMs} ms`, results);
+            } else if (!severity || severity === "log") {
+                // Shadow, or strict after the timeout: act on the verdict as it comes in
                 log(`user turn ${severity === "log" ? "logged" : "safe"}`, results);
-                return;
-            }
-            if (severity === "care") {
+            } else if (severity === "care") {
                 log(`user turn CARE "${transcript}"`, results);
                 enableSupportMode();
-                return;
+            } else {
+                await onBlockedTurn(transcript, results);
             }
 
-            if (killed) {
-                log(`user turn BLOCK after kill-switch, ignored "${transcript}"`, results);
-                return;
-            }
-
-            // Counted per user turn, not per detector (decision A5)
-            blockedTurns = (await incrementBlockedTurns(meetingId)) ?? blockedTurns + 1;
-            log(
-                `user turn BLOCK #${blockedTurns}/${SAFETY_KILL_AT} (agent responding: ${activeResponseId !== null}) "${transcript}"`,
-                results
-            );
-
-            if (blockedTurns >= SAFETY_KILL_AT) {
-                kill();
-                return;
-            }
-            refuse(noteForBlockedTurn(blockedTurns));
+            turn.rowId = recordGuardTurn({
+                meetingId,
+                mode,
+                content: transcript,
+                decision: finalDecision,
+                transcriptionMs: turn.speechStoppedAt === null ? null : Math.round(transcribedAt - turn.speechStoppedAt),
+                guardMs,
+                responseStartMs: turn.responseStartMs,
+                severity,
+            });
         }
     );
+
+    // Strict: without a transcript nothing can be checked; fail open like the detectors do
+    on("server.conversation.item.input_audio_transcription.failed", (event: { error?: unknown }) => {
+        log(`user transcription failed: ${JSON.stringify(event.error ?? null)}`);
+        if (mode === "strict") {
+            release();
+        }
+    });
 
     const checkResponse = async (responseId: string, isFinal: boolean) => {
         const state = responses.get(responseId);
@@ -317,6 +477,9 @@ export function attachRealtimeGuard(
         if (!state) {
             return;
         }
+        if (state.text === "") {
+            markResponseStart();
+        }
         state.text += event.delta;
         void checkResponse(event.response_id, false);
     };
@@ -339,5 +502,5 @@ export function attachRealtimeGuard(
     // so the user's first turn is checked at normal latency. Results are not recorded.
     void checkUserInput("Hello").then((warmup) => log("warmed up", warmup.results));
 
-    log("attached");
+    log(`attached (${mode}${mode === "strict" ? `, timeout ${STRICT_TIMEOUT_MS} ms` : ""})`);
 }

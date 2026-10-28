@@ -54,7 +54,8 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [ ] **Kill-switch không kết thúc được cuộc gọi** (28/10, `NhidMSS0…`): `blocked_turns` = 3, terminal báo lỗi khi `call.end()` nhưng log đã trôi mất. Không tái hiện được (12/12 request tới Stream ổn, ~0,3 s). Nghi do mạng máy dev lúc đó. Khi gặp lại: lưu dòng `kill-switch: failed to end the call: …`; hướng sửa: thử lại `call.end()` + tăng timeout của client Stream.
 - [ ] Độ trễ ~12 s lặp lại ở các lượt gọi OpenAI khi chạy `npm run dev` (script đo dùng `--dns-result-order=ipv4first` thì không bị): nghi là timeout kết nối IPv6 10 s + thử lại ở máy dev. Thử đặt IPv4 trước cho dev server rồi đo lại; nếu đúng thì số liệu độ trễ trong cuộc gọi từ trước tới nay bị nhiễu bởi máy dev.
 - [ ] Kiểm duyệt hậu kỳ chặn nhầm câu từ chối của agent ("This is the last warning…") khi ghép cặp với câu hỏi chế tạo bom (lệch kết quả khi ghép cặp).
-- [ ] Sau đó: chế độ guard (A2) → thực nghiệm → deploy (A3).
+- [~] **Strict mode có giới hạn thời gian (A2): đã code trên `feat/strict-mode` (28/10)**, kiểm chứng giao thức bằng script; chờ 2 cuộc gọi so sánh (`kiem-thu/2026-10-28-strict-mode.md`), sau đó người dùng chốt một chế độ.
+- [ ] Sau đó: thực nghiệm → deploy (A3).
 - [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
 - [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI).
 - [ ] Ẩn danh PII trước khi lưu (mục 4.5 đề cương).

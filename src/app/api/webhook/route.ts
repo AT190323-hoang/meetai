@@ -17,7 +17,7 @@ import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs"
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
-import { attachRealtimeGuard } from "@/lib/realtime-guard";
+import { attachRealtimeGuard, type GuardMode } from "@/lib/realtime-guard";
 import { CHAT_MODEL, CHAT_REASONING_EFFORT, REALTIME_MODEL } from "@/lib/models";
 import {
     checkAgentReply,
@@ -152,15 +152,22 @@ export async function POST(req: NextRequest) {
             model: REALTIME_MODEL,
         });
 
-        // REALTIME_GUARD=off runs the agent without the guard (baseline for comparisons)
+        // REALTIME_GUARD is for experiments only (A2: the product runs one fixed mode):
+        // "off" runs the agent without the guard (baseline), "strict" checks each user turn before
+        // the agent answers, anything else is shadow mode
         const guardEnabled = process.env.REALTIME_GUARD !== "off";
+        const guardMode: GuardMode = process.env.REALTIME_GUARD === "strict" ? "strict" : "shadow";
         // System-level guidance every agent gets; users cannot remove it
         const instructions = withVnPositionNote(existingAgent.instructions);
 
         realtimeClient.updateSession({
             instructions,
-            // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies
-            turn_detection: { type: "server_vad" },
+            // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies.
+            // Strict: VAD still detects turns and barge-in, but the guard decides when the agent answers
+            // (the library's type lacks these two GA fields; it forwards the object unchanged)
+            turn_detection: guardEnabled && guardMode === "strict"
+                ? { type: "server_vad", create_response: false, interrupt_response: true } as { type: "server_vad" }
+                : { type: "server_vad" },
             // User transcripts are required by the Nemotron realtime guard. Without a language the
             // model guesses it and often writes Vietnamese speech as Chinese or Thai, which the
             // guard then misjudges (a neutral sovereignty question was blocked as a violation)
@@ -175,6 +182,7 @@ export async function POST(req: NextRequest) {
                 instructions,
                 // Kill-switch: ends the call for every participant
                 endCall: () => call.end(),
+                mode: guardMode,
             });
         }
     } else if (eventType === "call.session_participant_left") {

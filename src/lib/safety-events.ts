@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { meetings, safetyEvents } from "@/db/schema";
+import { guardTurns, meetings, safetyEvents } from "@/db/schema";
 import { checkSafety, type SafetyResult } from "@/lib/nemotron";
 import {
     detectJailbreakLLM,
@@ -57,14 +57,20 @@ export function severityOf(result: GuardResult, role: "user" | "agent"): Severit
  * Runs every user-input detector in parallel: Nemotron content safety, both jailbreak detectors
  * (Nemotron Safety Guard does not detect jailbreaks on its own) and the Vietnam content policy.
  * The user message is checked alone: pairing it with an agent reply skews Nemotron's user verdict.
+ * `onResult` sees each verdict as soon as it arrives (strict mode refuses on the first block).
  */
-export async function checkUserInput(query: string) {
-    const results: GuardResult[] = await Promise.all([
-        checkSafety({ query }),
-        detectJailbreakNemoGuard(query),
-        detectJailbreakLLM(query),
-        detectVnPolicy(query),
-    ]);
+export async function checkUserInput(query: string, onResult?: (result: GuardResult) => void) {
+    const results: GuardResult[] = await Promise.all(
+        [
+            checkSafety({ query }),
+            detectJailbreakNemoGuard(query),
+            detectJailbreakLLM(query),
+            detectVnPolicy(query),
+        ].map((check) => check.then((result: GuardResult) => {
+            onResult?.(result);
+            return result;
+        }))
+    );
 
     return {
         results,
@@ -221,4 +227,24 @@ export function recordUserInputEvents(
     return Promise.all(
         results.map((result) => recordSafetyEvent({ ...params, role: "user", result }))
     );
+}
+
+/** Stores one user turn's timing (guard_turns); returns its id, or null when the write fails. */
+export async function recordGuardTurn(turn: typeof guardTurns.$inferInsert) {
+    try {
+        const [row] = await db.insert(guardTurns).values(turn).returning({ id: guardTurns.id });
+        return row?.id ?? null;
+    } catch (error) {
+        console.error(`[safety] failed to record guard turn for meeting ${turn.meetingId}`, error);
+        return null;
+    }
+}
+
+/** Fills in when the agent started answering a recorded turn. */
+export async function setGuardTurnResponseStart(turnId: string, responseStartMs: number) {
+    try {
+        await db.update(guardTurns).set({ responseStartMs }).where(eq(guardTurns.id, turnId));
+    } catch (error) {
+        console.error(`[safety] failed to update guard turn ${turnId}`, error);
+    }
 }

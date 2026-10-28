@@ -1,6 +1,6 @@
 # Khảo sát A2: shadow hay strict mode
 
-> Ngày: 21/10/2026. Trạng thái: **đang khảo sát**. Phần không cần gọi điện đã xong; phần cần cuộc gọi thật ở mục 5.
+> Ngày: 21/10/2026, cập nhật 28/10. Trạng thái: **đang khảo sát — strict có giới hạn thời gian đã code trên `feat/strict-mode` (28/10), chờ 2 cuộc gọi so sánh**. Phần không cần gọi điện đã xong; phần cần cuộc gọi thật ở mục 5.
 > Hướng đã chốt: sản phẩm chạy **một chế độ guard cố định** do hệ thống quyết định, người dùng không chọn được. Biến `REALTIME_GUARD=off|shadow|strict` chỉ để người vận hành chạy thực nghiệm.
 
 ## 1. Hai chế độ
@@ -78,3 +78,22 @@ Sau bước này chốt **một chế độ duy nhất** cho sản phẩm.
 - [../van-de-mo.md](../van-de-mo.md) mục A2
 - [../de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md](../de-xuat/2026-10-19-strict-mode-va-ngu-canh-nhieu-luot.md)
 - [../de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md](../de-xuat/2026-10-21-chinh-sach-phan-muc-vi-pham.md)
+
+## 7. Tiến độ 28/10: strict có giới hạn thời gian (nhánh `feat/strict-mode`)
+
+Người dùng duyệt 28/10: T = 2 s, agent im lặng trong lúc chờ (không nói tiếng đệm).
+
+**Kiểm chứng giao thức không cần người** (`scripts/thuc-nghiem/strict-session-check.cjs`): câu tiếng Việt tạo bằng TTS, phát vào phiên agent qua proxy Stream, `gpt-realtime-2.1`.
+- `create_response: false` có hiệu lực: **0** lần phiên tự trả lời trong 6 s sau khi người nói ngừng.
+- Bản chép lời tiếng Việt vẫn về, **0,3–0,9 s** sau `speech_stopped` (đây là phần "thời gian chép lời" của strict).
+- `response.create` gửi tay vẫn làm agent trả lời.
+- VAD tách "Xin chào, bạn giải thích giúp tôi…" thành 2 lượt ở dấu phẩy → strict không trả lời một lượt khi người dùng đã nói tiếp (trả lời ở lượt sau, đủ ngữ cảnh).
+
+**Cách chạy** (`src/lib/realtime-guard.ts`, bật bằng `REALTIME_GUARD=strict`, chỉ cho thực nghiệm):
+- Mỗi lượt: chờ bản chép lời → chạy 4 detector; detector đầu tiên báo `block` → từ chối ngay, không chờ các detector khác; cả 4 xong trước T → `safe`/`log` thì trả lời, `care` thì bật chế độ hỗ trợ **trước** rồi mới trả lời; quá T → trả lời, guard chạy tiếp như shadow.
+- Chép lời lỗi → trả lời luôn (fail-open). Chép lời rỗng (tiếng ồn) → im lặng.
+- Câu của agent vẫn kiểm song song như shadow.
+
+**Số đo mới** (bảng `guard_turns`, một dòng mỗi lượt, ở cả hai chế độ): chế độ, cách quyết định (`shadow`/`safe`/`care`/`block`/`timeout`), thời gian chép lời, thời gian guard, **từ lúc người dùng ngừng nói tới khi agent bắt đầu nói**. Tổng hợp: `scripts/thuc-nghiem/guard-turns-stats.cjs`. Với strict, `caught_in_time` của `safety_events` nghĩa là "quyết định trước khi agent nói".
+
+**Còn lại:** 2 cuộc gọi cùng một bộ câu (shadow, strict) → so sánh số đo + cảm nhận người dùng → người dùng chốt một chế độ (A2). Kịch bản: `kiem-thu/2026-10-28-strict-mode.md`.

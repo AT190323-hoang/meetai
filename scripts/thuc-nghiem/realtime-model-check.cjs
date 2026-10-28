@@ -35,10 +35,10 @@ function createAsker(client) {
   let current = null;
   const finish = (status) => {
     if (!current) return;
-    const { resolve, timer, startedAt, firstDelta, transcript } = current;
+    const { resolve, timer, startedAt, firstDelta, transcript, usage } = current;
     current = null;
     clearTimeout(timer);
-    resolve({ status, firstDeltaMs: firstDelta, doneMs: Math.round(performance.now() - startedAt), transcript });
+    resolve({ status, firstDeltaMs: firstDelta, doneMs: Math.round(performance.now() - startedAt), transcript, usage });
   };
   const onDelta = (event) => {
     if (!current) return;
@@ -47,7 +47,10 @@ function createAsker(client) {
   };
   client.realtime.on("server.response.output_audio_transcript.delta", onDelta);
   client.realtime.on("server.response.audio_transcript.delta", onDelta);
-  client.realtime.on("server.response.done", (event) => finish(event.response?.status ?? "done"));
+  client.realtime.on("server.response.done", (event) => {
+    if (current) current.usage = event.response?.usage ?? null;
+    finish(event.response?.status ?? "done");
+  });
   client.realtime.on("server.error", (event) => {
     const message = `error: ${JSON.stringify(event.error).slice(0, 150)}`;
     // Errors outside a question (e.g. a rejected session.update) would otherwise go unseen
@@ -119,5 +122,29 @@ async function checkModel(spec) {
     return { model, completed: `${ok.length}/${all.filter((row) => row.model === model).length}`, firstDelta_p50: pct(first, 50), firstDelta_p90: pct(first, 90), errors: all.filter((row) => row.model === model && row.status !== "completed").map((row) => row.status).join(" | ").slice(0, 120) };
   });
   console.table(summary);
+
+  // Token usage per answer (response.done), priced with the list prices in docs/khao-sat/doi-model.md
+  const PRICES = { // USD per 1M tokens: [text in, cached in, text out, audio in, cached audio in, audio out]
+    "gpt-realtime": [4, 0.4, 16, 32, 0.4, 64],
+    "gpt-realtime-2.1": [4, 0.4, 24, 32, 0.4, 64],
+    "gpt-realtime-2.1-mini": [0.6, 0.06, 2.4, 10, 0.3, 20],
+  };
+  const usageRows = [...new Set(all.map((row) => row.model))].map((spec) => {
+    const rows = all.filter((row) => row.model === spec && row.usage);
+    const sum = (f) => rows.reduce((total, row) => total + (f(row.usage) ?? 0), 0);
+    const textIn = sum((u) => u.input_token_details?.text_tokens);
+    const audioIn = sum((u) => u.input_token_details?.audio_tokens);
+    const cachedText = sum((u) => u.input_token_details?.cached_tokens_details?.text_tokens);
+    const cachedAudio = sum((u) => u.input_token_details?.cached_tokens_details?.audio_tokens);
+    const textOut = sum((u) => u.output_token_details?.text_tokens);
+    const audioOut = sum((u) => u.output_token_details?.audio_tokens);
+    const reasoning = sum((u) => u.output_token_details?.reasoning_tokens);
+    const [ti, tc, to, ai, ac, ao] = PRICES[spec.split("@")[0]] ?? [0, 0, 0, 0, 0, 0];
+    const usd = ((textIn - cachedText) * ti + cachedText * tc + textOut * to + (audioIn - cachedAudio) * ai + cachedAudio * ac + audioOut * ao) / 1e6;
+    const n = rows.length || 1;
+    return { model: spec, answers: rows.length, textIn: Math.round(textIn / n), cachedIn: Math.round((cachedText + cachedAudio) / n), textOut: Math.round(textOut / n), audioOut: Math.round(audioOut / n), reasoning: Math.round(reasoning / n), usd_per_answer: +(usd / n).toFixed(4) };
+  });
+  console.log("Per answer (averages):");
+  console.table(usageRows);
   process.exit(0);
 })();

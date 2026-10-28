@@ -112,3 +112,19 @@ Nên để tên model trong biến môi trường (như `VN_POLICY_MODEL` đang 
 - Code: `max_tokens` → `max_completion_tokens` (model có reasoning không nhận `max_tokens`); `reasoning_effort: "none"` qua `classifierOptions` (với reasoning khác `none`, `temperature: 0` bị từ chối).
 - Ghi chú: `jailbreak_llm` đúng câu "chế tạo bom" (không phải jailbreak) ở mọi model trong bộ câu này; mục "jailbreak_llm gắn nhầm nhãn" trong `van-de-mo.md` cần đối chiếu lại với bộ câu của khảo sát A2.
 - Max ~12–14 s ở vài lượt là nghẽn mạng của máy dev (cũng gặp với gpt-4o-mini), không phải của model.
+
+## 7. Chi phí thực đo (28/10)
+
+`scripts/thuc-nghiem/realtime-model-check.cjs` đọc `usage` của `response.done`, tính theo bảng giá mục 2 (câu hỏi dạng chữ, 6 câu trả lời mỗi model):
+
+| Model | Token âm thanh ra / câu | Token suy luận / câu | USD / câu trả lời |
+|---|---|---|---|
+| `gpt-realtime` (cũ) | 205 | 0 | 0,0193 |
+| `gpt-realtime-2.1` | 235 | 22 | 0,0177 |
+| `gpt-realtime-2.1-mini` | 199 | 34 | 0,0043 |
+
+- Đổi sang `gpt-realtime-2.1` **không làm tăng** chi phí mỗi câu trả lời (chênh ±10%). Âm thanh agent nói chiếm phần lớn chi phí.
+- Chat và tóm tắt rẻ hơn trước (`gpt-6.1-terra` rẻ hơn `gpt-4o` 2,5 lần); bộ phân loại đắt hơn ~1,5 lần nhưng chỉ ~0,1 USD / 1.000 lượt.
+- Chi phí tăng ngày 28/10 là do **dùng nhiều hơn**: 20 phút gọi (27/10: 9,8 phút) và các script đo của khảo sát này (~90 câu trả lời realtime ≈ 1,5 USD, ~1.700 lượt phân loại ≈ 0,15 USD).
+- Trong cuộc gọi thật, mỗi câu trả lời còn xử lý lại toàn bộ hội thoại trước đó (phần lớn được cache, 0,40 USD / 1M token) nên chi phí mỗi phút tăng dần theo độ dài cuộc gọi.
+- `gpt-realtime-2.1-mini` rẻ hơn ~4 lần, độ trễ tương đương (mục 6); chất lượng tiếng Việt chưa đánh giá. Dùng được cho các buổi test (`REALTIME_MODEL=gpt-realtime-2.1-mini`) và là phương án so sánh cho Chương 3.

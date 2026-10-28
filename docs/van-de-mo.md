@@ -57,7 +57,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [~] Kiểm duyệt hậu kỳ chặn nhầm câu từ chối của agent ("This is the last warning…"): sửa cùng `feat/agent-false-positive` (`agentReplySeverity`), chờ test gộp.
 - [x] **Strict mode có giới hạn thời gian (A2): chốt và gộp vào `29-finish` 28/10** (lịch sử: đã code trên `feat/strict-mode` (28/10), kiểm chứng giao thức bằng script; chờ 2 cuộc gọi so sánh (`kiem-thu/2026-10-28-strict-mode.md`), sau đó người dùng chốt một chế độ.
 - [ ] Sau đó: thực nghiệm → deploy (A3).
-- [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
+- [x] (28/10: hết sau khi đổi sang `gpt-5.6-luna` — câu "chế tạo bom" (N2 trong `classifier-model-compare.mjs`) đúng "không phải jailbreak" 9/9 lượt; không cần sửa prompt) Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
 - [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI). **Đề xuất 28/10, chờ duyệt:** `de-xuat/2026-10-28-thuc-nghiem-chuong-3.md`.
 - [x] **Agent rớt kết nối không còn kết thúc cả cuộc gọi** (28/10, gộp `29-finish`): chỉ người dùng rời đi mới kết thúc; agent rớt thì nối lại với transcript gần nhất làm ngữ cảnh; guard không gửi lệnh khi mất kết nối. Kiểm chứng bằng `agent-reconnect-check.ts` (3/3).
 - [ ] Ẩn danh PII trước khi lưu (mục 4.5 đề cương).

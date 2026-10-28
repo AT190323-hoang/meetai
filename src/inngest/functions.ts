@@ -6,6 +6,7 @@ import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
 import { SUMMARY_MODEL } from "@/lib/models";
+import { getRealtimeTranscript } from "@/lib/transcript";
 import { agentReplySeverity, checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
 const summerizer = createAgent({
@@ -14,7 +15,7 @@ const summerizer = createAgent({
   You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
 
 Write the whole summary in Vietnamese, the language of the users, including the headings ("### Tổng quan" for Overview, "### Ghi chú" for Notes).
-The transcript is an automatic English translation of Vietnamese speech, so some words are mistranscribed (for example "Tick Fun" for "tích phân"). Infer the intended meaning from context, and never invent content that was not discussed.
+The transcript comes from speech recognition, so some words may be mistranscribed. Infer the intended meaning from context, and never invent content that was not discussed.
 
 Use the following markdown structure for every output:
 
@@ -41,12 +42,18 @@ export const meetingsProcessing = inngest.createFunction(
   { id: "meetings/processing" },
   { event: "meetings/processing" },
   async ({ event, step }) => {
+    // The Vietnamese transcript recorded in the call; Stream's English translation when there is none
+    const realtimeTranscript = await step.run("fetch-realtime-transcript", async () => {
+      return getRealtimeTranscript(event.data.meetingId);
+    });
+    const fromStream = realtimeTranscript.length === 0;
+
     const response = await step.run("fetch-transcript", async () => {
-      return fetch(event.data.transcriptUrl).then((res) => res.text());
+      return fromStream ? fetch(event.data.transcriptUrl).then((res) => res.text()) : "";
     });
 
     const transcript = await step.run("parse-transcript", async () => {
-      return JSONL.parse<StreamTranscriptItem>(response);
+      return fromStream ? JSONL.parse<StreamTranscriptItem>(response) : realtimeTranscript;
     });
 
     const transcriptWithSpeakers = await step.run("add-speakers", async () => {
@@ -111,6 +118,9 @@ export const meetingsProcessing = inngest.createFunction(
     }
 
     const { output } = await summerizer.run(
+      (fromStream
+        ? "The transcript is an automatic English translation of Vietnamese speech (for example \"Tick Fun\" for \"tích phân\"). "
+        : "") +
       "Summarize the following transcript: " +
       JSON.stringify(transcriptWithSpeakers)
     );

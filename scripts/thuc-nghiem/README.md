@@ -19,6 +19,8 @@ node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/<tên>.mjs
 | `classifier-model-compare.mjs` | So sánh model cho `jailbreak_llm` + `vn_policy` trên cùng bộ câu (13 jailbreak + 25 vn_policy, prompt đọc từ code): độ chính xác, độ ổn định, độ trễ, chi phí | 28/10: gpt-4o-mini, gpt-6-luna, gpt-5.6-luna đều 100%; gpt-5.6-luna p90 1,42 s |
 | `strict-session-check.cjs` | Strict mode không cần người: tạo giọng tiếng Việt bằng TTS, phát vào phiên agent qua Stream với `create_response: false`; xem agent có tự trả lời không, bản chép lời có về không, `response.create` thủ công có chạy không | 28/10: 0 lần tự trả lời; chép lời về sau 0,3–0,9 s; trả lời thủ công chạy. VAD tách câu ở chỗ ngắt nghỉ |
 | `guard-turns-stats.cjs` | So sánh shadow / strict từ bảng `guard_turns`: cách quyết định từng lượt, thời gian chép lời, guard, tới khi agent nói (chỉ đọc DB) | Chờ cuộc gọi thật |
+| `agent-pair-check.mjs` | Vì sao Nemotron chặn nhầm câu agent: ghép với câu hỏi nó trả lời / câu hỏi sau / đứng riêng, trên ca thật 28/10 và câu có hại (chỉ Nemotron) | Ghép cặp 27/30; nguyên nhân: đoạn mở đầu chưa kịp từ chối. Xem `docs/khao-sat/agent-false-positive.md` |
+| `transcript-recorder-check.ts` | Tự kiểm module ghi transcript tiếng Việt: phát lại sự kiện thật trên client giả, ghi vào một meeting cũ rồi xoá (không gọi API trả phí) | 6/6 đạt. Xem `docs/khao-sat/vn-transcript.md` |
 | `s6-multiturn.mjs` | Đưa cả chuỗi hội thoại vào Nemotron: có giúp không, có "dính cờ" không | 12/16; dính cờ 2/2, báo nhầm câu hỗ trợ của agent |
 
 Chi tiết và kết luận: [docs/safety-guard.md](../../docs/safety-guard.md) mục 9.

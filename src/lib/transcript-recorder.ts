@@ -30,10 +30,20 @@ interface Reply {
  */
 export function attachTranscriptRecorder(
     client: RealtimeClient,
-    { meetingId, userId, agentId }: { meetingId: string; userId: string; agentId: string }
+    {
+        meetingId,
+        userId,
+        agentId,
+        callStartedAt,
+    }: {
+        meetingId: string;
+        userId: string;
+        agentId: string;
+        // Offsets are taken from the call start, so lines stay in order after the agent reconnects
+        callStartedAt: number;
+    }
 ) {
-    const attachedAt = performance.now();
-    const now = () => Math.round(performance.now() - attachedAt);
+    const now = () => Date.now() - callStartedAt;
     // Utterances whose transcript is still pending, oldest first
     const utterances: { startMs: number | null; endMs: number }[] = [];
     let speechStartedAt: number | null = null;

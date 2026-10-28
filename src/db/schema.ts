@@ -155,7 +155,7 @@ export const transcriptItems = pgTable("transcript_items", {
   speakerId: text("speaker_id").notNull(),
   role: safetyRole("role").notNull(),
   content: text("content").notNull(),
-  // Milliseconds since the agent joined the call
+  // Milliseconds since the call started (meetings.started_at)
   startMs: integer("start_ms").notNull(),
   endMs: integer("end_ms").notNull(),
   // An agent reply cut off before it finished; its text is cut to the estimated part that was heard

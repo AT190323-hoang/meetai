@@ -17,9 +17,8 @@ import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs"
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
-import { attachRealtimeGuard, type GuardMode } from "@/lib/realtime-guard";
-import { attachTranscriptRecorder } from "@/lib/transcript-recorder";
-import { CHAT_MODEL, CHAT_REASONING_EFFORT, REALTIME_MODEL } from "@/lib/models";
+import { startAgentSession } from "@/lib/agent-session";
+import { CHAT_MODEL, CHAT_REASONING_EFFORT } from "@/lib/models";
 import {
     checkAgentReply,
     checkUserInput,
@@ -118,11 +117,12 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
         }
 
+        const startedAt = new Date();
         await db
             .update(meetings)
             .set({
                 status: "active",
-                startedAt: new Date(),
+                startedAt,
             })
             .where(eq(meetings.id, existingMeeting.id));
 
@@ -146,57 +146,28 @@ export async function POST(req: NextRequest) {
             console.error(`[webhook] failed to add agent ${existingAgent.id} as a member of call ${meetingId}`, error);
         }
 
-        const realtimeClient = await streamVideo.video.connectOpenAi({
-            call,
-            openAiApiKey: process.env.OPENAI_API_KEY!,
-            agentUserId: existingAgent.id,
-            model: REALTIME_MODEL,
+        await startAgentSession({
+            meetingId,
+            ownerId: existingMeeting.userId,
+            agent: existingAgent,
+            callStartedAt: startedAt,
         });
-
-        // The product runs strict mode (decision A2, 28/10). REALTIME_GUARD is for experiments only:
-        // "off" runs the agent without the guard (baseline), "shadow" checks in parallel instead
-        const guardEnabled = process.env.REALTIME_GUARD !== "off";
-        const guardMode: GuardMode = process.env.REALTIME_GUARD === "shadow" ? "shadow" : "strict";
-        // System-level guidance every agent gets; users cannot remove it
-        const instructions = withVnPositionNote(existingAgent.instructions);
-
-        realtimeClient.updateSession({
-            instructions,
-            // The client's defaults send `turn_detection: null`, which disables VAD and the agent never replies.
-            // Strict: VAD still detects turns and barge-in, but the guard decides when the agent answers
-            // (the library's type lacks these two GA fields; it forwards the object unchanged)
-            turn_detection: guardEnabled && guardMode === "strict"
-                ? { type: "server_vad", create_response: false, interrupt_response: true } as { type: "server_vad" }
-                : { type: "server_vad" },
-            // User transcripts are required by the Nemotron realtime guard. Without a language the
-            // model guesses it and often writes Vietnamese speech as Chinese or Thai, which the
-            // guard then misjudges (a neutral sovereignty question was blocked as a violation)
-            ...(guardEnabled && {
-                input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const, language: "vi" },
-            }),
-        });
-
-        if (guardEnabled) {
-            // The Vietnamese transcript needs the user transcription the guard turns on
-            attachTranscriptRecorder(realtimeClient, {
-                meetingId,
-                userId: existingMeeting.userId,
-                agentId: existingAgent.id,
-            });
-            attachRealtimeGuard(realtimeClient, {
-                meetingId,
-                instructions,
-                // Kill-switch: ends the call for every participant
-                endCall: () => call.end(),
-                mode: guardMode,
-            });
-        }
     } else if (eventType === "call.session_participant_left") {
         const event = payload as CallSessionParticipantLeftEvent;
         const meetingId = event.call_cid.split(":")[1];
 
         if (!meetingId) {
             return NextResponse.json({ error: "Missing meetingId" }, { status: 400 })
+        }
+
+        // Only the user leaving ends the call: a dropped agent is reconnected (src/lib/agent-session.ts)
+        const [meeting] = await db
+            .select({ agentId: meetings.agentId })
+            .from(meetings)
+            .where(eq(meetings.id, meetingId));
+        if (meeting && event.participant.user.id === meeting.agentId) {
+            console.log(`[webhook] agent left call ${meetingId}; not ending the call`);
+            return NextResponse.json({ status: "ok" });
         }
 
         const call = streamVideo.video.call("default", meetingId);

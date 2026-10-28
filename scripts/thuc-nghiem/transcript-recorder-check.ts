@@ -22,7 +22,7 @@ const FULL = "Chào bạn, mình là trợ lý học toán. Hôm nay bạn muố
 const LONG = "Lịch sử toán học bắt đầu từ thời cổ đại với người Ai Cập và người Babylon, họ dùng toán để đo ruộng đất và tính lịch, sau đó người Hy Lạp xây dựng hình học thành một môn học chặt chẽ.";
 
 (async () => {
-    attachTranscriptRecorder(fakeClient as never, { meetingId, userId: "USER", agentId: "AGENT" });
+    attachTranscriptRecorder(fakeClient as never, { meetingId, userId: "USER", agentId: "AGENT", callStartedAt: Date.now() });
 
     // 1. The user speaks, the agent answers and plays it in full (4 s of audio)
     emit("input_audio_buffer.speech_started"); await wait(800);

@@ -104,7 +104,15 @@ export function attachRealtimeGuard(
         instructions,
         endCall,
         mode,
-    }: { meetingId: string; instructions: string; endCall: () => Promise<unknown>; mode: GuardMode }
+        supportMode: startInSupportMode = false,
+    }: {
+        meetingId: string;
+        instructions: string;
+        endCall: () => Promise<unknown>;
+        mode: GuardMode;
+        // A reconnected session resumes the supportive mode the call was already in
+        supportMode?: boolean;
+    }
 ) {
     const responses = new Map<string, ResponseState>();
     let activeResponseId: string | null = null;
@@ -125,9 +133,9 @@ export function attachRealtimeGuard(
     // together (e.g. after a slow guard) must not get one answer each
     let answeredSeq = 0;
     // Guard notes are appended to the agent's instructions instead of replacing them
-    let sessionInstructions = instructions;
+    let sessionInstructions = startInSupportMode ? `${instructions}\n\n${SUPPORT_NOTE}` : instructions;
     let refusalNote = REFUSAL_NOTE;
-    let supportMode = false;
+    let supportMode = startInSupportMode;
     // Fallback count when the DB write fails; the DB total survives guard restarts
     let blockedTurns = 0;
     let killed = false;
@@ -157,6 +165,16 @@ export function attachRealtimeGuard(
         console.log(`[guard][${meetingId}] ${message}${details}`);
     };
 
+    // Timers (strict timeout, kill fallback) can fire after the connection dropped, and the client
+    // throws when sending without one
+    const send = (eventName: string, data: Record<string, unknown> = {}) => {
+        if (!client.isConnected()) {
+            log(`not connected, dropped ${eventName}`);
+            return;
+        }
+        client.realtime.send(eventName, data);
+    };
+
     // The GA client types every event as `unknown`; payload shapes follow the Realtime API docs
     const on = <T,>(eventName: string, handler: (event: T) => void | Promise<void>) =>
         client.realtime.on(eventName, (event) => void handler(event as T));
@@ -166,7 +184,7 @@ export function attachRealtimeGuard(
         responseRequested = true;
         // The refusal is the answer to what the user said
         answerOwed = false;
-        client.realtime.send("response.create", {
+        send("response.create", {
             response: { instructions: `${sessionInstructions}\n\n${refusalNote}` },
         });
     };
@@ -185,7 +203,7 @@ export function attachRealtimeGuard(
             refusalQueued = true;
             // A response that is only requested is cancelled once it is created
             if (activeResponseId) {
-                client.realtime.send("response.cancel", {});
+                send("response.cancel");
             }
             return;
         }
@@ -207,7 +225,7 @@ export function attachRealtimeGuard(
             return;
         }
         responseRequested = true;
-        client.realtime.send("response.create", {});
+        send("response.create", {});
     };
 
     // A persistent session instruction (not a per-turn command) keeps the conversation natural
@@ -283,7 +301,7 @@ export function attachRealtimeGuard(
         // A refusal came in while this response was only requested; after the kill-switch only the
         // closing line may be spoken, whoever started the response
         if ((refusalQueued || killed) && !pendingRefusal) {
-            client.realtime.send("response.cancel", {});
+            send("response.cancel");
         }
         responses.set(event.response.id, {
             turn: currentTurn,
@@ -579,5 +597,10 @@ export function attachRealtimeGuard(
     // so the user's first turn is checked at normal latency. Results are not recorded.
     void checkUserInput("Hello").then((warmup) => log("warmed up", warmup.results));
 
-    log(`attached (${mode}${mode === "strict" ? `, timeout ${STRICT_TIMEOUT_MS} ms` : ""})`);
+    log(`attached (${mode}${mode === "strict" ? `, timeout ${STRICT_TIMEOUT_MS} ms` : ""}${supportMode ? ", support mode" : ""})`);
+
+    return {
+        // The kill-switch fired: the agent must not be reconnected
+        killed: () => killed,
+    };
 }

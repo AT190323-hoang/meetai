@@ -19,17 +19,20 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     if (!agent) throw new Error("agent not found");
     const meetingId = `reconnect-test-${nanoid(6)}`;
     const startedAt = new Date();
-    await db.insert(meetings).values({ id: meetingId, name: "reconnect test", userId: agent.userId, agentId: agent.id, status: "active", startedAt });
     const call = streamVideo.video.call("default", meetingId);
-    await call.create({ data: { created_by_id: agent.userId, members: [{ user_id: agent.userId, role: "call_member" }, { user_id: agent.id, role: "call_member" }] } });
-
     const logs: string[] = [];
     const original = console.log;
-    console.log = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); original(...args); };
     const errors = console.error;
-    console.error = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); errors(...args); };
 
+    // Everything after the insert is inside try: a failed step must not leave the row behind
+    // (a network error once left an "active" meeting in the owner's list)
     try {
+        await db.insert(meetings).values({ id: meetingId, name: "reconnect test", userId: agent.userId, agentId: agent.id, status: "active", startedAt });
+        await call.create({ data: { created_by_id: agent.userId, members: [{ user_id: agent.userId, role: "call_member" }, { user_id: agent.id, role: "call_member" }] } });
+
+        console.log = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); original(...args); };
+        console.error = (...args: unknown[]) => { logs.push(args.map(String).join(" ")); errors(...args); };
+
         const client = await startAgentSession({ meetingId, ownerId: agent.userId, agent, callStartedAt: startedAt });
         await wait(3000);
         original("--- causing a drop: response.cancel with no active response");
@@ -60,7 +63,8 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
         console.error = errors;
         await call.end().catch(() => {});
         await call.delete({ hard: true }).catch(() => {});
-        await db.delete(meetings).where(eq(meetings.id, meetingId));
+        await db.delete(meetings).where(eq(meetings.id, meetingId)).catch(() =>
+            original(`could not delete test meeting ${meetingId}; remove it by hand`));
         process.exit(0);
     }
 })();

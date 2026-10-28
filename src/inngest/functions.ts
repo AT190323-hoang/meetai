@@ -5,12 +5,16 @@ import { StreamTranscriptItem } from "@/modules/meetings/types";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
+import { SUMMARY_MODEL } from "@/lib/models";
 import { checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
 
 const summerizer = createAgent({
   name: "summarizer",
   system: `
   You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
+
+Write the whole summary in Vietnamese, the language of the users, including the headings ("### Tổng quan" for Overview, "### Ghi chú" for Notes).
+The transcript is an automatic English translation of Vietnamese speech, so some words are mistranscribed (for example "Tick Fun" for "tích phân"). Infer the intended meaning from context, and never invent content that was not discussed.
 
 Use the following markdown structure for every output:
 
@@ -30,7 +34,7 @@ Example:
 - Feature X automatically does Y
 - Mention of integration with Z
   `.trim(),
-  model: openai({ model: "gpt-4o", apiKey: process.env.OPENAI_API_KEY }),
+  model: openai({ model: SUMMARY_MODEL, apiKey: process.env.OPENAI_API_KEY }),
 });
 
 export const meetingsProcessing = inngest.createFunction(

@@ -1,6 +1,6 @@
 # Khảo sát: nâng cấp model OpenAI
 
-> Ngày: 28/10/2026. Trạng thái: **khảo sát xong, chờ duyệt kế hoạch**. Nguồn: trang pricing và deprecations chính thức của OpenAI (đọc 28/10/2026).
+> Ngày: 28/10/2026. Trạng thái: **kế hoạch duyệt 28/10; bước 2 và 3 đã code và đo trên `feat/model-upgrade`; chờ một cuộc gọi thật**. Nguồn: trang pricing và deprecations chính thức của OpenAI (đọc 28/10/2026).
 
 ## 1. Đang dùng gì, khi nào bị tắt
 
@@ -71,3 +71,44 @@ Nên để tên model trong biến môi trường (như `VN_POLICY_MODEL` đang 
 2. Agent cuộc gọi → `gpt-realtime-2.1`; chat + tóm tắt → `gpt-6.1-terra` (kèm tóm tắt tiếng Việt). Test bằng cuộc gọi và chat.
 3. Bộ phân loại → `gpt-6-luna`: đo lại độ chính xác và độ trễ, **gộp chung với khảo sát strict mode (A2)** vì cùng phụ thuộc độ trễ.
 4. (Thực nghiệm Chương 3) so sánh `gpt-realtime-2.1` với `-mini` về chi phí, độ trễ, chất lượng.
+
+## 6. Tiến độ
+
+**Bước 1 (28/10):** đã gộp 4 nhánh vào `29-finish`, tách `feat/model-upgrade`.
+
+**Bước 2 (28/10, chờ test):** tên model gom vào `src/lib/models.ts` (ghi đè bằng env).
+- Kiểm tra tài khoản: `gpt-realtime-2.1`, `gpt-realtime-2.1-mini`, `gpt-6.1-terra`, `gpt-6-luna` đều dùng được.
+- Agent cuộc gọi: `connectOpenAi({ model: REALTIME_MODEL })`. Chưa đặt reasoning cho realtime (để mặc định); đo độ trễ khi test.
+- Chat: `gpt-6.1-terra`, `reasoning_effort: "low"`. Thử một câu: `low` 3,0 s, `none` 2,4 s; chọn `low` vì chat đã chạy nền sau khi trả lời webhook.
+- Tóm tắt: `gpt-6.1-terra`, prompt yêu cầu viết tiếng Việt và suy ra từ bị chép sai. Chạy thử trên transcript `nilQr…`: 8,8 s, 1.817 token vào / 629 ra; summary tiếng Việt đúng nội dung, tự hiểu "Tick Fun" là tích phân, ghi nhận đúng các đoạn từ chối và lập trường chủ quyền.
+
+
+**Đo agent realtime qua Stream** (`scripts/thuc-nghiem/realtime-model-check.cjs`, 28/10): cuộc gọi dùng một lần, câu hỏi dạng chữ (không tính thời gian chép lời), đo tới đoạn transcript đầu tiên của agent (≈ lúc agent bắt đầu nói). 12 lượt mỗi cấu hình:
+
+| Cấu hình | Hoàn thành | p50 | p90 |
+|---|---|---|---|
+| `gpt-realtime` (cũ) | 12/12 | 539 ms | 571 ms |
+| `gpt-realtime-2.1` (mặc định) | 12/12 | 735 ms | 836 ms |
+| `gpt-realtime-2.1`, reasoning `low` | 12/12 | 697 ms | 777 ms |
+| `gpt-realtime-2.1`, reasoning `minimal` | 12/12 | 682 ms | 720 ms |
+| `gpt-realtime-2.1-mini` | 12/12 | 744 ms | 980 ms |
+
+- Proxy `connect_agent` của Stream nhận tên model mới, kết nối ~1,4–2,2 s như cũ. Trả lời tiếng Việt đúng ở mọi cấu hình.
+- Bản 2.1 bắt đầu nói chậm hơn ~0,15–0,25 s; hạ reasoning (server xác nhận `effort` đã đổi) không cải thiện rõ hơn độ dao động → **giữ mặc định**, không thêm code. Bản mini không nhanh hơn.
+- Khác biệt nhỏ: 2.1 đọc số điện thoại theo từng chữ số ("0 3 5 4, 0 9 9, 1 2 3"), bản cũ đọc theo cụm.
+
+**Bước 3: bộ phân loại** (`scripts/thuc-nghiem/classifier-model-compare.mjs`, 28/10). Prompt đọc thẳng từ code; 13 câu jailbreak (7 tấn công gồm 1 câu chép lời sai từ cuộc gọi 27/10, 6 không phải tấn công gồm câu hỏi chế tạo bom) + 25 câu `vn_policy` (20 câu người dùng gồm 2 câu từ cuộc gọi 27/10, 5 câu agent); mỗi câu 3 lần; gọi theo lô 4 như guard. Hai lượt đo:
+
+| Model | jailbreak | vn_policy | Không ổn định | p50 | p90 | USD / 1.000 lượt |
+|---|---|---|---|---|---|---|
+| `gpt-4o-mini` (cũ) | 39/39 | 75/75 | 0 | 926–937 ms | 1.130–1.187 ms | 0,072 |
+| `gpt-6-luna`, reasoning `none` | 39/39 | 75/75 | 0 | 1.405–1.454 ms | 2.227–2.257 ms | 0,052 |
+| `gpt-6-luna`, reasoning `low` | 39/39 | 75/75 | 0 | 1.533 ms | 2.062 ms | 0,065 |
+| **`gpt-5.6-luna`, reasoning `none`** | **39/39** | **75/75** | 0 | **1.129 ms** | **1.417 ms** | ≈0,11 (ước tính) |
+| `gpt-5.4-nano`, reasoning `none` | 39/39 | 72/75 | 0 | 879 ms | 1.071 ms | — |
+
+- **Chọn `gpt-5.6-luna` (reasoning `none`)** thay cho `gpt-6-luna` của kế hoạch: cùng độ chính xác 100%, nhanh hơn ~0,3 s ở p50 và ~0,8 s ở p90. Độ trễ bộ phân loại là giới hạn dưới của strict mode (A2), nên ưu tiên tốc độ; chênh chi phí không đáng kể (~0,1 USD / 1.000 lượt). `gpt-5.4-nano` nhanh nhất nhưng bỏ sót G5 (xuyên tạc lịch sử) → loại.
+- `gpt-6-luna` vẫn dùng được bằng env (`JAILBREAK_CLASSIFIER_MODEL`, `VN_POLICY_MODEL`).
+- Code: `max_tokens` → `max_completion_tokens` (model có reasoning không nhận `max_tokens`); `reasoning_effort: "none"` qua `classifierOptions` (với reasoning khác `none`, `temperature: 0` bị từ chối).
+- Ghi chú: `jailbreak_llm` đúng câu "chế tạo bom" (không phải jailbreak) ở mọi model trong bộ câu này; mục "jailbreak_llm gắn nhầm nhãn" trong `van-de-mo.md` cần đối chiếu lại với bộ câu của khảo sát A2.
+- Max ~12–14 s ở vài lượt là nghẽn mạng của máy dev (cũng gặp với gpt-4o-mini), không phải của model.

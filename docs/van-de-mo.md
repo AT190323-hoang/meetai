@@ -58,7 +58,7 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [~] **Strict mode có giới hạn thời gian (A2): đã code trên `feat/strict-mode` (28/10)**, kiểm chứng giao thức bằng script; chờ 2 cuộc gọi so sánh (`kiem-thu/2026-10-28-strict-mode.md`), sau đó người dùng chốt một chế độ.
 - [ ] Sau đó: thực nghiệm → deploy (A3).
 - [ ] Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
-- [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI).
+- [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI). **Đề xuất 28/10, chờ duyệt:** `de-xuat/2026-10-28-thuc-nghiem-chuong-3.md`.
 - [ ] Ẩn danh PII trước khi lưu (mục 4.5 đề cương).
 
 ## C. Việc cần làm ngay về vận hành

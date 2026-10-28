@@ -140,6 +140,29 @@ export const safetyEvents = pgTable("safety_events", {
   createAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+/**
+ * The call's Vietnamese transcript, recorded from the realtime session (src/lib/transcript-recorder.ts).
+ * Stream's transcript is an English translation, so this one is shown and summarized when present.
+ */
+export const transcriptItems = pgTable("transcript_items", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  meetingId: text("meeting_id")
+    .notNull()
+    .references(() => meetings.id, { onDelete: 'cascade' }),
+  // The user's id or the agent's id, like Stream's speaker_id
+  speakerId: text("speaker_id").notNull(),
+  role: safetyRole("role").notNull(),
+  content: text("content").notNull(),
+  // Milliseconds since the agent joined the call
+  startMs: integer("start_ms").notNull(),
+  endMs: integer("end_ms").notNull(),
+  // An agent reply cut off before it finished; its text is cut to the estimated part that was heard
+  interrupted: boolean("interrupted").notNull().default(false),
+  createAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const guardMode = pgEnum("guard_mode", ["shadow", "strict"]);
 
 // How the realtime guard decided each user turn, for the shadow vs strict comparison (A2)

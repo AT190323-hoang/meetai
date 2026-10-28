@@ -18,6 +18,7 @@ import { ChatCompletionMessageParam } from "openai/resources/index.mjs"
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
 import { attachRealtimeGuard, type GuardMode } from "@/lib/realtime-guard";
+import { attachTranscriptRecorder } from "@/lib/transcript-recorder";
 import { CHAT_MODEL, CHAT_REASONING_EFFORT, REALTIME_MODEL } from "@/lib/models";
 import {
     checkAgentReply,
@@ -176,6 +177,12 @@ export async function POST(req: NextRequest) {
         });
 
         if (guardEnabled) {
+            // The Vietnamese transcript needs the user transcription the guard turns on
+            attachTranscriptRecorder(realtimeClient, {
+                meetingId,
+                userId: existingMeeting.userId,
+                agentId: existingAgent.id,
+            });
             attachRealtimeGuard(realtimeClient, {
                 meetingId,
                 instructions,

@@ -14,6 +14,7 @@ import { generateAvatarUri } from '@/lib/avatar';
 
 import { streamChat } from '@/lib/stream-chat';
 import { getFlagCause } from '@/lib/safety-events';
+import { getRealtimeTranscript } from "@/lib/transcript";
 
 // A flagged meeting stays hidden from its owner until they acknowledge the warning (decision A5)
 const isQuarantined = (meeting: { safetyStatus: string; safetyAcknowledgedAt: Date | null }) =>
@@ -86,16 +87,20 @@ export const meetingsRouter = createTRPCRouter({
                 });
             }
 
-            if (!existingMeeting.transcriptUrl) {
+            // The Vietnamese transcript recorded in the call comes first; Stream's is an English translation
+            const realtimeTranscript = await getRealtimeTranscript(existingMeeting.id);
+            if (realtimeTranscript.length === 0 && !existingMeeting.transcriptUrl) {
                 return [];
             }
 
-            const transcript = await fetch(existingMeeting.transcriptUrl)
-                .then((res) => res.text())
-                .then((text) => JSONL.parse<StreamTranscriptItem>(text))
-                .catch(() => {
-                    return [];
-                });
+            const transcript = realtimeTranscript.length > 0
+                ? realtimeTranscript
+                : await fetch(existingMeeting.transcriptUrl!)
+                    .then((res) => res.text())
+                    .then((text) => JSONL.parse<StreamTranscriptItem>(text))
+                    .catch(() => {
+                        return [];
+                    });
 
             const speakerIds = [
                 ...new Set(transcript.map((items) => items.speaker_id))

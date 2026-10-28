@@ -20,6 +20,13 @@ Khảo sát: `khao-sat/agent-false-positive.md`.
 - [ ] Khi kill-switch ngắt cuộc gọi, trình duyệt chuyển sang màn hình "đã kết thúc" (trước đây đứng ở màn hình đang gọi).
 - Cách nhanh: giữ `SAFETY_WARN_AT=2`, `SAFETY_KILL_AT=3`, nói 3 câu vi phạm (mục 1 đã có 2 câu).
 
+### 4. Transcript tiếng Việt (28/10)
+Khảo sát: `khao-sat/vn-transcript.md`. Dùng luôn cuộc gọi của mục 1–3.
+- [ ] Tab **Transcript** hiện **tiếng Việt**, đúng thứ tự, lời bạn và lời agent xen kẽ; câu bị tách vì ngừng giữa chừng được gộp thành một dòng.
+- [ ] Câu agent bị cắt (bạn nói chen, hoặc bị từ chối) kết thúc bằng "…" và **không chứa phần bạn chưa nghe**.
+- [ ] **Summary** viết đúng nội dung (không còn kiểu "Tick Fun").
+- [ ] Meeting cũ (trước 28/10) vẫn hiện transcript của Stream như trước.
+
 ### Sau khi test xong
 - [ ] Xóa `SAFETY_WARN_AT`, `SAFETY_KILL_AT` (và `REALTIME_MODEL` nếu đã đặt) khỏi `.env`.
 

@@ -17,6 +17,8 @@ node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/<tên>.mjs
 | `vn-policy-survey.mjs` | Detector `vn_policy`: độ chính xác và độ trễ, tách riêng so với gộp với `jailbreak_llm` (`[reps]` số lần chạy) | Tách riêng 18/18 + 5/5, p90 mỗi lượt 1,41 s. Xem `docs/khao-sat/vn-policy.md` |
 | `realtime-model-check.cjs` | Model agent realtime chạy qua proxy Stream được không, đo thời gian tới khi agent bắt đầu nói (câu hỏi dạng chữ, cuộc gọi dùng một lần). `gpt-realtime-2.1@low` = kèm mức suy luận; `REPEAT=n` | 28/10: 2.1 p50 735 ms vs gpt-realtime 539 ms. Xem `docs/khao-sat/doi-model.md` |
 | `classifier-model-compare.mjs` | So sánh model cho `jailbreak_llm` + `vn_policy` trên cùng bộ câu (13 jailbreak + 25 vn_policy, prompt đọc từ code): độ chính xác, độ ổn định, độ trễ, chi phí | 28/10: gpt-4o-mini, gpt-6-luna, gpt-5.6-luna đều 100%; gpt-5.6-luna p90 1,42 s |
+| `strict-session-check.cjs` | Strict mode không cần người: tạo giọng tiếng Việt bằng TTS, phát vào phiên agent qua Stream với `create_response: false`; xem agent có tự trả lời không, bản chép lời có về không, `response.create` thủ công có chạy không | 28/10: 0 lần tự trả lời; chép lời về sau 0,3–0,9 s; trả lời thủ công chạy. VAD tách câu ở chỗ ngắt nghỉ |
+| `guard-turns-stats.cjs` | So sánh shadow / strict từ bảng `guard_turns`: cách quyết định từng lượt, thời gian chép lời, guard, tới khi agent nói (chỉ đọc DB) | Chờ cuộc gọi thật |
 | `s6-multiturn.mjs` | Đưa cả chuỗi hội thoại vào Nemotron: có giúp không, có "dính cờ" không | 12/16; dính cờ 2/2, báo nhầm câu hỗ trợ của agent |
 
 Chi tiết và kết luận: [docs/safety-guard.md](../../docs/safety-guard.md) mục 9.

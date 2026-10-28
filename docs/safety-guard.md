@@ -164,7 +164,8 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 | `AGENT_VN_POSITION` | (bật) | `off` bỏ chỉ dẫn lập trường Việt Nam khỏi instructions, chỉ dùng cho thực nghiệm |
 | `SAFETY_WARN_AT` | `5` | Lượt bị chặn thứ mấy thì cảnh báo |
 | `SAFETY_KILL_AT` | `10` | Lượt bị chặn thứ mấy thì kill-switch (cảnh báo lần cuối ở lượt trước đó). Hạ thấp khi demo |
-| `REALTIME_GUARD` | (bật) | `off` để tắt guard trong cuộc gọi |
+| `REALTIME_GUARD` | (strict) | Sản phẩm chạy strict (A2, chốt 28/10). Chỉ cho thực nghiệm: `shadow` cho agent trả lời ngay và guard kiểm song song; `off` tắt guard trong cuộc gọi |
+| `GUARD_STRICT_TIMEOUT_MS` | `2000` | Strict: thời gian tối đa agent chờ guard; quá thì trả lời và guard chạy tiếp như shadow |
 
 ## 7. Kết quả thử nghiệm trong cuộc gọi thật (18/10/2026, meeting `RiUEWXiClf16J_9jHFYdS`)
 

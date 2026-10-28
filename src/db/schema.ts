@@ -140,3 +140,35 @@ export const safetyEvents = pgTable("safety_events", {
   createAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const guardMode = pgEnum("guard_mode", ["shadow", "strict"]);
+
+// How the realtime guard decided each user turn, for the shadow vs strict comparison (A2)
+export const guardDecision = pgEnum("guard_decision", [
+  "shadow",        // the agent answered at once; the guard checked in parallel
+  "safe",          // strict: every detector cleared the turn before the timeout
+  "care",          // strict: self-harm signal before the timeout; answered in supportive mode
+  "block",         // strict: refused before the timeout
+  "timeout",       // strict: no verdict in time; the agent answered and the guard went on as shadow
+]);
+
+/** One row per user turn in a call: where the time goes between the user and the agent's answer. */
+export const guardTurns = pgTable("guard_turns", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => nanoid()),
+  meetingId: text("meeting_id")
+    .notNull()
+    .references(() => meetings.id, { onDelete: 'cascade' }),
+  mode: guardMode("mode").notNull(),
+  content: text("content").notNull(),
+  decision: guardDecision("decision").notNull(),
+  // End of speech (server VAD) to the finished transcript
+  transcriptionMs: integer("transcription_ms"),
+  // Transcript to the last detector's verdict
+  guardMs: integer("guard_ms"),
+  // End of speech to the agent's first words; null when the agent did not answer this turn
+  responseStartMs: integer("response_start_ms"),
+  severity: safetySeverity("severity"),
+  createAt: timestamp("created_at").notNull().defaultNow(),
+});
+

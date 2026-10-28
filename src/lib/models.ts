@@ -21,3 +21,11 @@ export const CLASSIFIER_MODEL = "gpt-5.6-luna";
 /** Request options for a classifier model: reasoning models need it turned off to stay fast. */
 export const classifierOptions = (model: string) =>
     model.startsWith("gpt-4") ? {} : { reasoning_effort: "none" as const };
+
+/**
+ * The user's speech in the call, read by the guard and kept as the Vietnamese transcript.
+ * gpt-transcribe: 0.9% word errors vs 17.1% for gpt-4o-mini-transcribe, no output in other scripts
+ * and no safety keyword lost (scripts/thuc-nghiem/stt-compare.mjs, docs/khao-sat/stt.md). A context
+ * prompt is not used: it made gpt-4o-mini-transcribe write the prompt itself on unclear audio.
+ */
+export const TRANSCRIPTION_MODEL = process.env.TRANSCRIPTION_MODEL ?? "gpt-transcribe";

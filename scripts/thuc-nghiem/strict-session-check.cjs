@@ -5,6 +5,7 @@
 // Stream's proxy (throwaway call), followed by silence so server VAD ends the turn.
 // Usage (from repo root):
 //   node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/strict-session-check.cjs [shadow|strict]
+// STT_MODEL picks the user transcription model (default gpt-transcribe, as in the app).
 const { createRequire } = require("module");
 const req = createRequire(process.cwd() + "/package.json");
 const { StreamClient } = req("@stream-io/node-sdk");
@@ -70,7 +71,7 @@ async function synthesize(text) {
       turn_detection: MODE === "strict"
         ? { type: "server_vad", create_response: false, interrupt_response: true }
         : { type: "server_vad" },
-      input_audio_transcription: { model: "gpt-4o-mini-transcribe", language: "vi" },
+      input_audio_transcription: { model: process.env.STT_MODEL ?? "gpt-transcribe", language: "vi" },
     });
     await new Promise((resolve) => setTimeout(resolve, 1500));
 

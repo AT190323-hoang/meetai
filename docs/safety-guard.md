@@ -66,7 +66,7 @@ sequenceDiagram
         O-->>G: transcript agent (từng đoạn)
         G->>D: content_safety(câu user, đoạn agent)
     and Guard kiểm tra câu người dùng
-        O-->>G: transcript người dùng (gpt-4o-mini-transcribe)
+        O-->>G: transcript người dùng (gpt-transcribe)
         G->>D: content_safety + 2 jailbreak detector (song song)
     end
     alt Mức block
@@ -148,7 +148,7 @@ Bảng này là nguồn số liệu cho Chương 3 (tỷ lệ phát hiện theo 
 | D3 | **Fail-open**: detector lỗi → coi như an toàn, ghi lỗi | Guard sập không được làm hỏng cuộc gọi | Khi guard lỗi, nội dung không được kiểm |
 | D4 | Ba detector cho đầu vào, lấy **mức cao nhất** | Nemotron không bắt jailbreak; NemoGuard bỏ sót câu ngắn/tiếng Việt | Thêm chi phí API (gpt-4o-mini) và lượt gọi NVIDIA |
 | D5 | Dùng API hosted của NVIDIA, không tự host | Không cần GPU; độ trễ chấp nhận được | Phụ thuộc giới hạn tần suất API miễn phí |
-| D6 | Chép lời người dùng bằng `gpt-4o-mini-transcribe` | Nhanh, tốt cho tiếng Việt hơn whisper-1 | Thêm chi phí; chép sai → guard đánh giá sai |
+| D6 | Chép lời người dùng bằng `gpt-transcribe` (`language: vi`; trước 28/10 là `gpt-4o-mini-transcribe`) | Sai từ 0,9% so với 17,1%, không ra chữ nước ngoài, không mất từ khoá an toàn (`khao-sat/stt.md`) | Thêm chi phí; chép sai → guard đánh giá sai |
 | D7 | Phân mức `block` / `care` / `log` (A1) | Tránh chặn oan nhóm hay báo nhầm (PII, chửi thề…); người có ý định tự hại cần được hỗ trợ, không bị trừng phạt | Nhãn lạ của Nemotron xếp `log` kèm cảnh báo (fail-open), có thể bỏ sót nếu mô hình đặt nhãn mới |
 
 ## 6. Cấu hình

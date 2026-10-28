@@ -52,7 +52,7 @@
 - Rẻ hơn `gpt-4o-mini` 1,5 lần. Tắt reasoning để giữ độ trễ thấp — **độ trễ bộ phân loại quyết định chế độ strict (A2)**.
 - Rủi ro lớn nhất: số đo hiện có (`vn_policy` 18/18 + 5/5, `jailbreak_llm` p50 1,07 s / p90 3,5 s) là của `gpt-4o-mini`. Đổi model = **đo lại toàn bộ**. Tham số cũng phải đổi (`max_tokens` → `max_completion_tokens`; `temperature` có thể không được nhận khi có reasoning).
 
-**Chép lời trong cuộc gọi.** Giữ `gpt-4o-mini-transcribe` (tắt muộn nhất, 26/02/2027). Thử `gpt-transcribe` sau; trang của `gpt-live-transcribe` ghi không hỗ trợ endpoint `v1/realtime`, nên có thể không dùng được trong phiên của agent.
+**Chép lời trong cuộc gọi.** (28/10: đã đổi sang `gpt-transcribe`, xem `khao-sat/stt.md`.) Giữ `gpt-4o-mini-transcribe` (tắt muộn nhất, 26/02/2027). Thử `gpt-transcribe` sau; trang của `gpt-live-transcribe` ghi không hỗ trợ endpoint `v1/realtime`, nên có thể không dùng được trong phiên của agent.
 
 ## 4. Độ phức tạp khi tích hợp
 

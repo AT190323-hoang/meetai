@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
-import { REALTIME_MODEL } from "@/lib/models";
+import { REALTIME_MODEL, TRANSCRIPTION_MODEL } from "@/lib/models";
 import { attachRealtimeGuard, type GuardMode } from "@/lib/realtime-guard";
 import { hasCareSignal } from "@/lib/safety-events";
 import { streamVideo } from "@/lib/stream-video";
@@ -90,7 +90,8 @@ export async function startAgentSession(session: AgentSession, reconnect = false
         // model guesses it and often writes Vietnamese speech as Chinese or Thai, which the
         // guard then misjudges (a neutral sovereignty question was blocked as a violation)
         ...(guardEnabled && {
-            input_audio_transcription: { model: "gpt-4o-mini-transcribe" as const, language: "vi" },
+            // (the library's type predates gpt-transcribe; it forwards the model name unchanged)
+            input_audio_transcription: { model: TRANSCRIPTION_MODEL as "gpt-4o-mini-transcribe", language: "vi" },
         }),
     });
 

@@ -44,7 +44,7 @@ Nhánh `feat/stream-auth`. Checklist: `kiem-thu/2026-10-21-checklist-test.md`. D
 - Meeting `tVLN…`: Stream có **2 bản transcript** — phiên thật 05:44:55–05:47:54 (4.134 byte) và một **phiên phụ** 05:47:55–05:48:12 (0 byte) bắt đầu 7 s sau `call.end()`. Webhook `call.transcription_ready` luôn ghi đè `transcriptUrl` → bản rỗng đè bản thật. Chưa rõ ai mở phiên phụ (webhook đã từ chối nối lại agent vì meeting đang `processing`; nghi trình duyệt).
 - Sửa: webhook chỉ nhận **bản transcript đầu tiên** của mỗi meeting (bỏ qua và không gửi Inngest cho các bản sau); Inngest **không tóm tắt transcript rỗng** (summary = null, giao diện ghi "Nothing was said…").
 - Sửa dữ liệu: `tVLN…` trỏ lại bản transcript thật; `aVwU…` xóa câu xin lỗi trong summary.
-- Còn lại: giao diện cuộc gọi chưa chuyển sang màn hình "đã kết thúc" khi server ngắt cuộc gọi (SDK tự rời nhưng giao diện vẫn ở màn hình đang gọi).
+- Giao diện cuộc gọi chuyển sang màn hình "đã kết thúc" khi server ngắt cuộc gọi: đã sửa 28/10 (`call-ui.tsx` theo `callingState`), chờ test gộp (`kiem-thu/cho-test-gop.md`).
 
 ## 6. Test chat (27/10 tối) — phần A (`TcODbeUiNivosYjKQW6Ml`), phần C (`ucWc1s14mnRdAjU5UanGh`)
 

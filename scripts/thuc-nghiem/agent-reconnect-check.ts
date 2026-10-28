@@ -34,9 +34,12 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
         await wait(3000);
         original("--- causing a drop: response.cancel with no active response");
         client.realtime.send("response.cancel", {});
-        await wait(12000);
+        // The dev machine's network sometimes stalls ~12 s, so wait for the new session up to 30 s
+        const attachedTwice = () => logs.filter((line) => line.includes("attached (")).length >= 2;
+        for (let waited = 0; waited < 30000 && !attachedTwice(); waited += 500) {
+            await wait(500);
+        }
         const reconnected = logs.some((line) => line.includes("reconnecting (attempt 1/"));
-        const attachedTwice = logs.filter((line) => line.includes("attached (")).length >= 2;
 
         original("--- ending the call: the agent must not come back");
         await db.update(meetings).set({ status: "processing" }).where(eq(meetings.id, meetingId));
@@ -49,7 +52,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
         console.error = errors;
         for (const [name, ok] of [
             ["dropped agent reconnected", reconnected],
-            ["guard attached again on the new session", attachedTwice],
+            ["guard attached again on the new session", attachedTwice()],
             ["no reconnect after the call ended", after === before],
         ] as const) original(ok ? "PASS" : "FAIL", name);
     } finally {

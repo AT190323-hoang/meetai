@@ -12,6 +12,9 @@ import { maskPii } from "@/lib/pii";
 const DEFAULT_WORDS_PER_SECOND = 3.5;
 // Replies are written when their audio stops playing; this long after response.done at most
 const PLAYBACK_WAIT_MS = 60_000;
+// User fragments this close together are one utterance (server VAD splits at pauses), written as one
+// line so personal data spoken across fragments ("…là 0012." + "03012345") is masked as a whole
+const UTTERANCE_GAP_MS = 2_500;
 
 interface Reply {
     createdAt: number;
@@ -85,12 +88,35 @@ export function attachTranscriptRecorder(
 
     const takeUtterance = () => utterances.shift() ?? { startMs: null, endMs: now() };
 
+    let pendingLine: { texts: string[]; startMs: number; endMs: number; timer: ReturnType<typeof setTimeout> } | null = null;
+
+    const flushLine = () => {
+        if (!pendingLine) {
+            return;
+        }
+        const { texts, startMs, endMs, timer } = pendingLine;
+        clearTimeout(timer);
+        pendingLine = null;
+        void write({ speakerId: userId, role: "user", content: texts.join(" "), startMs, endMs });
+    };
+
     on("server.conversation.item.input_audio_transcription.completed", (event: { transcript?: string }) => {
         const utterance = takeUtterance();
         const text = event.transcript?.trim();
-        if (text) {
-            void write({ speakerId: userId, role: "user", content: text, startMs: utterance.startMs ?? utterance.endMs, endMs: utterance.endMs });
+        if (!text) {
+            return;
         }
+        const startMs = utterance.startMs ?? utterance.endMs;
+        if (pendingLine && startMs - pendingLine.endMs <= UTTERANCE_GAP_MS) {
+            clearTimeout(pendingLine.timer);
+            pendingLine.texts.push(text);
+            pendingLine.endMs = utterance.endMs;
+        } else {
+            flushLine();
+            pendingLine = { texts: [text], startMs, endMs: utterance.endMs, timer: setTimeout(() => {}, 0) };
+        }
+        // Written once the user has been quiet long enough that no fragment can still follow
+        pendingLine.timer = setTimeout(flushLine, UTTERANCE_GAP_MS + 1_000);
     });
 
     on("server.conversation.item.input_audio_transcription.failed", () => {

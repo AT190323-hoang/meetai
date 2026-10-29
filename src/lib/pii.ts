@@ -30,18 +30,27 @@ function luhn(digits: string) {
 // Most specific first; a span claimed by one pattern is not matched again
 const PATTERNS: { type: PiiType; regex: RegExp; accept?: (value: string) => boolean }[] = [
     { type: "email", regex: /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu },
+    // An email read aloud and transcribed as words: "lan chấm nguyễn a còng gmail chấm com"
+    {
+        type: "email",
+        regex: /[\p{L}\p{N}_-]+(?:[\s.,]+chấm[\s.,]+[\p{L}\p{N}_-]+)*[\s.,]+(?:a còng|a móc|@)[\s.,]+[\p{L}\p{N}-]+(?:[\s.,]*(?:chấm|\.)[\s.,]*\p{L}{2,})+/giu,
+    },
     // 13-19 digits, optionally grouped, passing the Luhn check
     { type: "card", regex: /\b\d(?:[ -]?\d){12,18}\b/g, accept: (value) => luhn(digitsOf(value)) },
     // An account number only counts next to a word that says so ("số tài khoản", "STK", "account")
     {
         type: "bank_account",
-        regex: /(?<=(?:tài khoản|số tk|stk|account(?: number)?|acct)\s*(?:là|:|số|no\.?)?\s*)\d(?:[ .-]?\d){5,18}\b/giu,
+        // up to six words may sit between the keyword and the number ("số tài khoản để đóng học phí là …")
+        regex: /(?<=(?:tài khoản|số tk|stk|account(?: number)?|acct)(?:\s+\p{L}+){0,6}?\s*(?:là|:|số|no\.?)?\s*)\d(?:[ .-]?\d){5,18}\b/giu,
     },
     // Citizen ID: 12 digits starting with 0 (province code); old ID card: 9 digits next to "CMND"
     { type: "national_id", regex: /\b0\d{11}\b/g },
     { type: "national_id", regex: /(?<=(?:cmnd|chứng minh(?: nhân dân| thư)?|căn cước)\s*(?:số|là|:)?\s*)\d{9,12}\b/giu },
     // Vietnamese phone numbers: 0 or +84 followed by 9 digits, in groups
     { type: "phone", regex: /(?:\+84|0084|\b0)(?:[ .-]?\d){9}\b/g },
+    // Last: any other run of 9 or more digits, e.g. an account number read back without its keyword.
+    // Money written with thousands dots (1.000.000.000) is not personal data
+    { type: "number", regex: /\b\d(?:[ .-]?\d){8,}\b/g, accept: (value) => !/^\d{1,3}(?:\.\d{3})+$/.test(value) },
 ];
 
 function findPii(text: string): Match[] {

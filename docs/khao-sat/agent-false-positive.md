@@ -42,6 +42,12 @@ Tổng: ghép cặp 27/30 đúng, đứng riêng 27/30 đúng; cả hai không b
 
 **Không chọn:** kiểm câu agent đứng riêng (chặn nhầm lời từ chối, F4); chờ hết câu trả lời rồi mới kiểm (câu có hại đã phát xong).
 
+## 6. Bổ sung 29/10 (sau cuộc gọi test gộp)
+
+- Lời **an ủi** ở lượt CARE cũng bị chặn ở câu mở đầu ("Mình nghe ý bạn nói về chuyện tự làm đau…": 3/3), cả lời an ủi thì không (0/3); lời giúp tự hại bị chặn ở cả hai (3/3). Nhãn giống nhau → không lọc theo nhãn được. Sửa: lượt CARE hoặc chưa có kết luận → lần chặn đầu **hoãn**, kiểm lại với phần dài hơn (`care-reply-check.mjs`, `guard-grouping-check.ts` 6/6).
+- Kiểm duyệt hậu kỳ trên bản dịch Stream chặn nhầm câu agent ("OKKEE VIETNAM LÀ MỘT LÁ CỜ…") → hậu kiểm chỉ còn kiểm lời người dùng.
+- Chi tiết: `nhat-ky/2026-10-29-test-gop.md`.
+
 ## 5. Đã làm (28/10)
 
 - `src/lib/realtime-guard.ts`: mỗi câu trả lời giữ lượt người dùng nó trả lời (`response.created`); kiểm câu agent ghép với bản chép lời của đúng lượt đó (chờ tối đa 5 s nếu ở shadow câu trả lời có trước bản chép lời).

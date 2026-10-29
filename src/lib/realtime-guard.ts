@@ -4,6 +4,7 @@ import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 import {
     agentReplySeverity,
     checkAgentReply,
+    isSoleContentSafetyBlock,
     checkUserInput,
     incrementBlockedTurns,
     isVnPolicyResult,
@@ -38,6 +39,12 @@ const END_CALL_ATTEMPTS = 3;
 // How long an agent reply check waits for the transcript / verdict of the user turn it answers
 const TURN_WAIT_MS = 5_000;
 const TURN_VERDICT_WAIT_MS = 30_000;
+// A content-safety block on a reply waits this long for the user turn's verdict before acting on it
+// (agentReplySeverity needs it to tell a refusal or a supportive reply from harmful content)
+const AGENT_ACTION_WAIT_MS = 2_000;
+// Fragments of one spoken sentence (server VAD still splits at pauses) are checked and counted as
+// one utterance when a fragment starts this soon after the previous one ended
+const UTTERANCE_GAP_MS = 2_500;
 // Strict mode: longest the agent waits for the guard before answering anyway (A2 survey)
 const STRICT_TIMEOUT_MS = Number(process.env.GUARD_STRICT_TIMEOUT_MS ?? 2000);
 
@@ -51,20 +58,22 @@ interface Turn {
     speechStoppedAt: number | null;
     responseStartMs: number | null;
     rowId: Promise<string | null> | null;
-    // The transcript (null when empty or failed) and the user verdict, as soon as they are known
+    speechStartedAt: number | null;
+    // The utterance text (null when empty or failed) and its verdict, as soon as they are known
     text: Promise<string | null>;
     verdict: Promise<Severity | null>;
-    blocked: boolean;
+    // undefined until the verdict is known
+    severity: Severity | null | undefined;
     setText: (text: string | null) => void;
     setVerdict: (severity: Severity | null) => void;
 }
 
-function createTurn(seq: number, speechStoppedAt: number | null): Turn {
+function createTurn(seq: number, speechStoppedAt: number | null, speechStartedAt: number | null = null): Turn {
     let setText!: (text: string | null) => void;
     let setVerdict!: (severity: Severity | null) => void;
     const text = new Promise<string | null>((resolve) => { setText = resolve; });
     const verdict = new Promise<Severity | null>((resolve) => { setVerdict = resolve; });
-    return { seq, speechStoppedAt, responseStartMs: null, rowId: null, text, verdict, blocked: false, setText, setVerdict };
+    return { seq, speechStoppedAt, speechStartedAt, responseStartMs: null, rowId: null, text, verdict, severity: undefined, setText, setVerdict };
 }
 
 /** Resolves to the promise's value, or to `fallback` after `ms` (a turn whose transcript never comes). */
@@ -82,6 +91,9 @@ interface ResponseState {
     isRefusal: boolean;
     // The kill-switch closing line; the call ends when it is done
     isClosing: boolean;
+    // A reply to a self-harm disclosure whose opening was blocked: acted on only if the block holds
+    // on more of the reply
+    careBlockDeferred: boolean;
 }
 
 /**
@@ -129,6 +141,10 @@ export function attachRealtimeGuard(
     let answerOwed = false;
     let currentTurn: Turn | null = null;
     let turnSeq = 0;
+    let speechStartedAt: number | null = null;
+    // The utterance being spoken: its fragments so far, when the last one ended, whether its block
+    // was already counted for the kill-switch
+    let utterance: { texts: string[]; endedAt: number; counted: boolean } | null = null;
     // Latest utterance a response has already covered: fragments of one sentence that are cleared
     // together (e.g. after a slow guard) must not get one answer each
     let answeredSeq = 0;
@@ -312,6 +328,7 @@ export function attachRealtimeGuard(
             transcriptDone: false,
             isRefusal: pendingRefusal,
             isClosing: killed && pendingRefusal,
+            careBlockDeferred: false,
         });
         pendingRefusal = false;
     });
@@ -344,11 +361,12 @@ export function attachRealtimeGuard(
 
     on("server.input_audio_buffer.speech_started", () => {
         userSpeaking = true;
+        speechStartedAt = performance.now();
     });
 
     on("server.input_audio_buffer.speech_stopped", () => {
         userSpeaking = false;
-        currentTurn = createTurn(++turnSeq, performance.now());
+        currentTurn = createTurn(++turnSeq, performance.now(), speechStartedAt);
     });
 
     // The agent's first words for the latest user turn (any response, refusals included)
@@ -366,13 +384,27 @@ export function attachRealtimeGuard(
         });
     };
 
-    const onBlockedTurn = async (transcript: string, results: GuardResult[]) => {
+    const onBlockedTurn = async (
+        transcript: string,
+        results: GuardResult[],
+        group: { counted: boolean } | null
+    ) => {
         if (killed) {
             log(`user turn BLOCK after kill-switch, ignored "${transcript}"`, results);
             return;
         }
 
-        // Counted per user turn, not per detector (decision A5)
+        // A later fragment of an utterance that was already counted is refused but not counted again
+        if (group?.counted) {
+            log(`user turn BLOCK, same utterance already counted "${transcript}"`, results);
+            refuse(noteForBlockedTurn(blockedTurns));
+            return;
+        }
+        if (group) {
+            group.counted = true;
+        }
+
+        // Counted per user utterance, not per detector or fragment (decision A5)
         blockedTurns = (await incrementBlockedTurns(meetingId)) ?? blockedTurns + 1;
         log(
             `user turn BLOCK #${blockedTurns}/${SAFETY_KILL_AT} (agent responding: ${activeResponseId !== null}) "${transcript}"`,
@@ -399,12 +431,22 @@ export function attachRealtimeGuard(
                 }
                 return;
             }
-            lastUserText = transcript;
             if (!currentTurn) {
                 currentTurn = createTurn(turnSeq, null);
             }
             const turn = currentTurn;
-            turn.setText(transcript);
+            // Join the fragment to the utterance it continues, and judge the whole utterance: a
+            // fragment alone lacks context ("Làm hộ chiếu online." was flagged as fraud on 29/10)
+            const startedAt = turn.speechStartedAt ?? turn.speechStoppedAt ?? performance.now();
+            if (!utterance || startedAt - utterance.endedAt > UTTERANCE_GAP_MS) {
+                utterance = { texts: [], endedAt: 0, counted: false };
+            }
+            const group = utterance;
+            group.texts.push(transcript);
+            group.endedAt = turn.speechStoppedAt ?? performance.now();
+            const text = group.texts.join(" ");
+            lastUserText = text;
+            turn.setText(text);
             const transcribedAt = performance.now();
 
             // Shadow has nothing to decide: the agent is already answering
@@ -415,24 +457,24 @@ export function attachRealtimeGuard(
                         return;
                     }
                     decision = "timeout";
-                    log(`strict: no verdict within ${STRICT_TIMEOUT_MS} ms, the agent answers and the guard goes on as shadow "${transcript}"`);
+                    log(`strict: no verdict within ${STRICT_TIMEOUT_MS} ms, the agent answers and the guard goes on as shadow "${text}"`);
                     release(turn.seq);
                 }, STRICT_TIMEOUT_MS)
                 : undefined;
 
-            const { results, severity } = await checkUserInput(transcript, (result) => {
+            const { results, severity } = await checkUserInput(text, (result) => {
                 // Strict: refuse on the first "block" without waiting for the slower detectors
                 if (decision !== null || severityOf(result, "user") !== "block") {
                     return;
                 }
                 decision = "block";
-                turn.blocked = true;
+                turn.severity = "block";
                 clearTimeout(timer);
-                void onBlockedTurn(transcript, [result]);
+                void onBlockedTurn(text, [result], group);
             });
             clearTimeout(timer);
             const guardMs = Math.round(performance.now() - transcribedAt);
-            turn.blocked = severity === "block";
+            turn.severity = severity;
             turn.setVerdict(severity);
 
             // Read through a function: TypeScript narrows `decision` as if the callbacks never ran
@@ -443,7 +485,7 @@ export function attachRealtimeGuard(
                 ? activeResponseId !== null
                 : decided() === null || decided() === "block";
             void recordUserInputEvents(
-                { meetingId, source: "realtime", content: transcript, caughtInTime },
+                { meetingId, source: "realtime", content: text, caughtInTime },
                 results
             );
 
@@ -453,9 +495,9 @@ export function attachRealtimeGuard(
                 finalDecision = severity === "block" ? "block" : severity === "care" ? "care" : "safe";
                 decision = finalDecision;
                 if (severity === "block") {
-                    void onBlockedTurn(transcript, results);
+                    void onBlockedTurn(text, results, group);
                 } else {
-                    log(`strict: user turn ${severity === "care" ? `CARE "${transcript}"` : severity === "log" ? "logged" : "safe"} after ${guardMs} ms`, results);
+                    log(`strict: user turn ${severity === "care" ? `CARE "${text}"` : severity === "log" ? "logged" : "safe"} after ${guardMs} ms`, results);
                     if (severity === "care") {
                         // Set before the answer, so the first reply is already supportive
                         enableSupportMode();
@@ -468,16 +510,16 @@ export function attachRealtimeGuard(
                 // Shadow, or strict after the timeout: act on the verdict as it comes in
                 log(`user turn ${severity === "log" ? "logged" : "safe"}`, results);
             } else if (severity === "care") {
-                log(`user turn CARE "${transcript}"`, results);
+                log(`user turn CARE "${text}"`, results);
                 enableSupportMode();
             } else {
-                await onBlockedTurn(transcript, results);
+                await onBlockedTurn(text, results, group);
             }
 
             turn.rowId = recordGuardTurn({
                 meetingId,
                 mode,
-                content: transcript,
+                content: text,
                 decision: finalDecision,
                 transcriptionMs: turn.speechStoppedAt === null ? null : Math.round(transcribedAt - turn.speechStoppedAt),
                 guardMs,
@@ -522,13 +564,31 @@ export function attachRealtimeGuard(
         state.checking = false;
         const caughtInTime = state.active;
 
-        // Acted on now with what is known; a verdict on the user turn that arrives later only
-        // changes how the event is recorded (agentReplySeverity)
-        const severity = maxSeverity(results.map((result) => agentReplySeverity(result, turn?.blocked ?? false)));
+        // A content-safety block waits briefly for the user turn's verdict, which can turn it into a
+        // log (agentReplySeverity); a verdict that arrives later only changes how the event is recorded
+        let userSeverity = turn?.severity;
+        if (turn && userSeverity === undefined && verdictSeverity === "block") {
+            userSeverity = await within<Severity | null | undefined>(turn.verdict, AGENT_ACTION_WAIT_MS, undefined);
+        }
+        let severity = maxSeverity(results.map((result) => agentReplySeverity(result, userSeverity)));
+
+        // Reply to a self-harm disclosure, or to a turn whose verdict is still pending (the user
+        // detectors can take several seconds): its opening line restates what the user said ("I hear
+        // you talking about hurting yourself") and Nemotron blocks it, labels and all, exactly like a
+        // harmful reply; with the rest of the reply it is judged safe, whereas harmful replies stay
+        // blocked (scripts/thuc-nghiem/care-reply-check.mjs). So the first block waits for more text.
+        const moreTextComing = !state.transcriptDone || state.checkedLength < state.text.length;
+        const deferCareBlock = (userSeverity === "care" || userSeverity === undefined) && severity === "block" &&
+            !state.careBlockDeferred && moreTextComing && isSoleContentSafetyBlock(results, userSeverity);
+        if (deferCareBlock) {
+            state.careBlockDeferred = true;
+            severity = "log";
+        }
+
         void (async () => {
-            const userBlocked = turn
-                ? (await within(turn.verdict, TURN_VERDICT_WAIT_MS, null)) === "block"
-                : false;
+            const recordedSeverity = turn
+                ? await within<Severity | null | undefined>(turn.verdict, TURN_VERDICT_WAIT_MS, undefined)
+                : undefined;
             for (const result of results) {
                 void recordSafetyEvent({
                     meetingId,
@@ -537,15 +597,20 @@ export function attachRealtimeGuard(
                     content,
                     result,
                     caughtInTime,
-                    severity: agentReplySeverity(result, userBlocked),
+                    // A deferred block is evidence, not a verdict; the next check of the reply decides
+                    severity: deferCareBlock && agentReplySeverity(result, recordedSeverity) === "block"
+                        ? "log"
+                        : agentReplySeverity(result, recordedSeverity),
                 });
             }
         })();
 
         if (!severity || severity === "log") {
-            log(verdictSeverity === "block"
-                ? `agent chunk BLOCK ignored: it answers a blocked user turn, which is already refused "${content}"`
-                : `agent chunk ${severity === "log" ? "logged" : "safe"}`, results);
+            log(deferCareBlock
+                ? `agent chunk BLOCK deferred: reply to a ${userSeverity === "care" ? "self-harm disclosure" : "turn not judged yet"}, judged again with more text "${content}"`
+                : verdictSeverity === "block"
+                    ? `agent chunk BLOCK ignored: it answers a blocked user turn, which is already refused "${content}"`
+                    : `agent chunk ${severity === "log" ? "logged" : "safe"}`, results);
             // The final check is skipped while another check is in flight, so run it now
             if (state.transcriptDone && state.checkedLength < state.text.length) {
                 void checkResponse(responseId, true);
@@ -563,7 +628,7 @@ export function attachRealtimeGuard(
         }
         // Only the Vietnam content policy objected: have the agent correct itself instead of refusing
         const policyOnly = results.every((result) =>
-            agentReplySeverity(result, turn?.blocked ?? false) !== "block" || (isVnPolicyResult(result) && result.violation));
+            agentReplySeverity(result, userSeverity) !== "block" || (isVnPolicyResult(result) && result.violation));
         refuse(policyOnly ? VN_CORRECTION_NOTE : REFUSAL_NOTE);
     };
 

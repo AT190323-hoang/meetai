@@ -23,9 +23,12 @@ node --dns-result-order=ipv4first --env-file=.env scripts/thuc-nghiem/<tên>.mjs
 | `transcript-recorder-check.ts` | Tự kiểm module ghi transcript tiếng Việt: phát lại sự kiện thật trên client giả, ghi vào một meeting cũ rồi xoá (không gọi API trả phí) | 6/6 đạt. Xem `docs/khao-sat/vn-transcript.md` |
 | `agent-reconnect-check.ts` | Agent bị ngắt kết nối có tự nối lại không, và không nối lại sau khi cuộc gọi kết thúc (meeting + cuộc gọi tạm, xoá sau; gây ngắt bằng một lệnh server từ chối) | 28/10: 3/3 đạt, nối lại sau ~1 s |
 | `stt-compare.mjs` | So sánh model chép lời tiếng Việt (có / không gợi ý ngữ cảnh) trên giọng TTS sạch và có nhiễu: tỷ lệ sai từ, chữ nước ngoài, mất từ khoá an toàn (≈0,05 USD) | 28/10: `gpt-transcribe` 0,9% / 0 / 0 so với `gpt-4o-mini-transcribe` 17,1% / 3 / 4. Xem `docs/khao-sat/stt.md` |
-| `pii-check.ts` | Tự kiểm nhận dạng / gắn nhãn / mã hoá PII (không gọi API) | 29/10: 16/16 |
-| `guard-grouping-check.ts` | Phát lại các mảnh câu gây lỗi ngày 29/10 qua guard + detector thật (client giả, meeting tạm): đếm vi phạm một lần mỗi câu, không chặn mảnh của câu hợp lệ, không cắt lời an ủi, vẫn cắt lời giúp tự hại | 29/10: 6/6 |
+| `pii-check.ts` | Tự kiểm nhận dạng / gắn nhãn / mã hoá PII (không gọi API) | 29/10: 26/26 (gồm số đọc bằng chữ) |
+| `guard-grouping-check.ts` | Phát lại các mảnh câu gây lỗi ngày 29/10 qua guard + detector thật (client giả, meeting tạm): đếm vi phạm một lần mỗi câu, không chặn mảnh của câu hợp lệ, không cắt lời an ủi, vẫn cắt lời giúp tự hại | 29/10: 7/7 (thêm ca câu mở đầu bị chặn nhầm sau lượt đọc CCCD) |
 | `care-reply-check.mjs` | Nemotron trên câu agent trả lời người muốn tự hại: câu mở đầu / cả câu / câu có hại (chỉ NVIDIA) | Câu mở đầu bị chặn 3/3, cả lời an ủi 0/3, lời có hại 3/3 |
+| `chuong3-build-dataset.mjs` | Dựng bộ dữ liệu Chương 3 (`dataset/chuong3.json`, 254 câu): câu an toàn tự soạn (`dataset/chuong3-benign.json`), câu của các script cũ, JailbreakBench (tải về, dịch máy sang tiếng Việt; gitignore) | 29/10 |
+| `chuong3-offline.ts` | KB1: chạy bộ dữ liệu qua đúng `checkUserInput` / `checkAgentReply`, `[reps]` lần; xuất `docs/thuc-nghiem/ket-qua-chuong3.md` + CSV (`--report` chỉ tạo lại báo cáo) | 29/10: phát hiện 87,4%, chặn nhầm 18,8%, câu agent có hại 100% |
+| `chuong3-call-sheet.mjs` | Sinh bản đầy đủ của kịch bản KB2/KB3 (điền câu theo mã, gitignore) | — |
 | `s6-multiturn.mjs` | Đưa cả chuỗi hội thoại vào Nemotron: có giúp không, có "dính cờ" không | 12/16; dính cờ 2/2, báo nhầm câu hỗ trợ của agent |
 
 Chi tiết và kết luận: [docs/safety-guard.md](../../docs/safety-guard.md) mục 9.

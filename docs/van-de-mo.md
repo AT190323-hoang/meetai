@@ -56,16 +56,16 @@ Chi tiết ở mục 6 của [de-xuat/2026-10-20-kill-switch-va-quy-trinh-su-co.
 - [x] (28/10: đã thấy timeout kết nối 10 s cả khi ép IPv4 → do mạng máy dev chập chờn, không phải IPv6; ghi làm giới hạn khi đọc số đo trên máy dev) Độ trễ ~12 s lặp lại ở các lượt gọi OpenAI khi chạy `npm run dev` (script đo dùng `--dns-result-order=ipv4first` thì không bị): nghi là timeout kết nối IPv6 10 s + thử lại ở máy dev. Thử đặt IPv4 trước cho dev server rồi đo lại; nếu đúng thì số liệu độ trễ trong cuộc gọi từ trước tới nay bị nhiễu bởi máy dev.
 - [~] Kiểm duyệt hậu kỳ chặn nhầm câu từ chối của agent ("This is the last warning…"): sửa cùng `feat/agent-false-positive` (`agentReplySeverity`), chờ test gộp.
 - [x] **Strict mode có giới hạn thời gian (A2): chốt và gộp vào `29-finish` 28/10** (lịch sử: đã code trên `feat/strict-mode` (28/10), kiểm chứng giao thức bằng script; chờ 2 cuộc gọi so sánh (`kiem-thu/2026-10-28-strict-mode.md`), sau đó người dùng chốt một chế độ.
-- [ ] Sau đó: thực nghiệm → deploy (A3).
+- [x] **29/10:** thực nghiệm Chương 3 xong (KB1 văn bản, KB2 cuộc gọi bình thường, KB3 lớp an toàn — `thuc-nghiem/`) và deploy EC2 (A3, `trien-khai-ec2.md`). Còn: viết tài liệu đồ án.
 - [x] (28/10: hết sau khi đổi sang `gpt-5.6-luna` — câu "chế tạo bom" (N2 trong `classifier-model-compare.mjs`) đúng "không phải jailbreak" 9/9 lượt; không cần sửa prompt) Chỉnh prompt `jailbreak_llm`: đang gắn nhãn jailbreak cho yêu cầu độc hại trực tiếp (khảo sát A2, mục 6).
-- [ ] Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI). **Đề xuất 28/10, chờ duyệt:** `de-xuat/2026-10-28-thuc-nghiem-chuong-3.md`.
+- [x] (29/10, xong) Bộ dữ liệu thử nghiệm + script đo cho Chương 3 (tỷ lệ phát hiện theo detector, độ trễ, caught_in_time, EN vs VI). **Đề xuất 28/10, chờ duyệt:** `de-xuat/2026-10-28-thuc-nghiem-chuong-3.md`.
 - [x] **Agent rớt kết nối không còn kết thúc cả cuộc gọi** (28/10, gộp `29-finish`): chỉ người dùng rời đi mới kết thúc; agent rớt thì nối lại với transcript gần nhất làm ngữ cảnh; guard không gửi lệnh khi mất kết nối. Kiểm chứng bằng `agent-reconnect-check.ts` (3/3).
 - [~] **Làm 29/10 (phương án C), chờ test gộp.** Ẩn danh PII trước khi lưu (mục 4.5 đề cương; đồ án mục 3.1.4 còn nhắc trang quản trị vi phạm). **Đề xuất 28/10, chờ quyết:** `de-xuat/2026-10-28-an-danh-pii.md`.
 
 ## C. Việc cần làm ngay về vận hành
 
 - [x] (đã gọi nhiều lần 27–28/10 với bản mới) **Test lại một cuộc gọi thật** sau khi merge `main` (Next 15.3.8, bản vá CVE) và nâng `@stream-io/node-sdk` 0.7.44 → 0.7.64 ngày 21/10. Build đã qua, nhưng `connectOpenAi` chưa được kiểm tra với bản mới.
-- [ ] ~~Đổi webhook Stream về Vercel~~ → thay bằng: **đổi webhook Stream về server EC2** khi deploy (A3, 21/10: cả app chạy trên EC2, không dùng Vercel cho agent).
+- [x] ~~Đổi webhook Stream về Vercel~~ → **đã đổi webhook Stream về server EC2** (29/10) khi deploy (A3, 21/10: cả app chạy trên EC2, không dùng Vercel cho agent).
 - [ ] (gộp vào deploy EC2, A3) Bản Vercel đang chạy code cũ có lỗi: `ws` bufferutil, giao thức beta (`session.type`), VAD tắt → agent không nhận instructions. Cần deploy code mới (và vẫn còn vấn đề A3).
 - [x] ~~Commit các thay đổi hiện tại~~ — đã commit 20/10 trên `29-finish` và đã push lên `origin/29-finish` (chưa merge `main` vì merge sẽ tự deploy production trên Vercel). File `.docx`/`.pdf` đồ án được đưa vào `.gitignore` (repo công khai); quản lý phiên bản bằng Google Drive/OneDrive.
 - [x] `npm audit` (28/10): 90 → 46 lỗ hổng, **0 nghiêm trọng** (còn 9 cao trong `inngest`/`zod`/`opentelemetry`/`postcss`, có lý do giữ). Chi tiết `khao-sat/npm-audit.md`. Đăng nhập / thanh toán với `better-auth` 1.7 chờ test gộp.

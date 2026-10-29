@@ -2,7 +2,7 @@
 // transcript text. [[pii:<item id>:<index>:<type>:<length>]]; the length lets the UI draw a blurred
 // stand-in of the same size without ever receiving the value.
 
-export type PiiType = "phone" | "email" | "national_id" | "card" | "bank_account";
+export type PiiType = "phone" | "email" | "national_id" | "card" | "bank_account" | "number";
 
 export const PII_LABELS: Record<PiiType, string> = {
     phone: "số điện thoại",
@@ -10,6 +10,8 @@ export const PII_LABELS: Record<PiiType, string> = {
     national_id: "số CCCD/CMND",
     card: "số thẻ",
     bank_account: "số tài khoản",
+    // Any other run of 9+ digits (an ID or account number heard without its keyword)
+    number: "dãy số",
 };
 
 export const piiMarkerPattern = () => /\[\[pii:([^:\]]+):(\d+):([a-z_]+):(\d+)\]\]/g;

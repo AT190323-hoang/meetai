@@ -18,11 +18,19 @@ const cases: [string, string][] = [
     ["Thẻ 4111 1111 1111 1111 hết hạn 12/28.", "Thẻ [số thẻ] hết hạn 12/28."],
     ["Chuyển vào số tài khoản 1903 4567 8901 Techcombank.", "Chuyển vào số tài khoản [số tài khoản] Techcombank."],
     ["STK: 0123456789", "STK: [số tài khoản]"],
+    // Seen in the 29/10 calls: fragments joined into one utterance, spoken email, read-back numbers
+    ["Công dân của tôi là 0012 03012345, còn số tài khoản để đóng học phí là 1903 4567 8901.",
+        "Công dân của tôi là [dãy số], còn số tài khoản để đóng học phí là [số tài khoản]."],
+    ["Email của chị Lan là Lan chấm Nguyễn. a còng gmail chấm com.", "Email của chị Lan là [email]."],
+    ["Rõ rồi. Mình đã nghe số bạn nói: 00345678901.", "Rõ rồi. Mình đã nghe số bạn nói: [dãy số]."],
+    ["Số điện thoại 0987 654 321.", "Số điện thoại [số điện thoại]."],
+    ["Dự án được duyệt 1.000.000.000 đồng.", "Dự án được duyệt 1.000.000.000 đồng."],
     // Must stay untouched
     ["Năm 1975 thống nhất đất nước, dân số khoảng 100 triệu người.", "Năm 1975 thống nhất đất nước, dân số khoảng 100 triệu người."],
     ["Giá là 2.500.000 đồng, mã đơn 123456.", "Giá là 2.500.000 đồng, mã đơn 123456."],
     ["Phương trình x^2 - 5x + 6 = 0 có hai nghiệm 2 và 3.", "Phương trình x^2 - 5x + 6 = 0 có hai nghiệm 2 và 3."],
-    ["Số 4111 1111 1111 1112 không phải thẻ hợp lệ.", "Số 4111 1111 1111 1112 không phải thẻ hợp lệ."],
+    // Not a valid card (Luhn), but still a long number: masked with the generic label
+    ["Số 4111 1111 1111 1112 không phải thẻ hợp lệ.", "Số [dãy số] không phải thẻ hợp lệ."],
 ];
 
 let failed = 0;

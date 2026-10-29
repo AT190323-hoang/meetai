@@ -96,19 +96,26 @@ export async function checkAgentReply(query: string, reply: string) {
 }
 
 /**
- * Policy tier to act on for an agent reply verdict. When the user's message it answers was itself
- * blocked, the guard already refuses, and a content-safety "block" on the reply is almost always
- * its opening line before the refusal ("I understand your question, let me explain...") read
- * against the harmful request (docs/khao-sat/agent-false-positive.md): it is only logged, so the
- * reply is not cut twice and the meeting is not flagged as the agent's fault.
+ * Policy tier to act on for an agent reply verdict, given the tier of the user turn it answers
+ * (undefined while that verdict is still pending). When the user turn was blocked, the guard
+ * already refuses, and a content-safety "block" on the reply is almost always its opening line
+ * before the refusal ("I understand your question, let me explain...") read against the harmful
+ * request (docs/khao-sat/agent-false-positive.md): it is only logged, so the reply is not cut twice
+ * and the meeting is not flagged as the agent's fault. Replies to self-harm disclosures are handled
+ * in the guard (a block there has to hold on more of the reply, `isSoleContentSafetyBlock`).
  */
-export function agentReplySeverity(result: GuardResult, userBlocked: boolean): Severity | null {
+export function agentReplySeverity(result: GuardResult, userSeverity: Severity | null | undefined): Severity | null {
     const severity = severityOf(result, "agent");
-    if (userBlocked && severity === "block" && !isJailbreakResult(result) && !isVnPolicyResult(result)) {
+    if (userSeverity === "block" && severity === "block" && !isJailbreakResult(result) && !isVnPolicyResult(result)) {
         return "log";
     }
     return severity;
 }
+
+/** Whether content safety is the only detector that blocks a reply (vn_policy does not object). */
+export const isSoleContentSafetyBlock = (results: GuardResult[], userSeverity: Severity | null | undefined) =>
+    results.some((result) => !isVnPolicyResult(result) && !isJailbreakResult(result) && agentReplySeverity(result, userSeverity) === "block") &&
+    results.every((result) => !isVnPolicyResult(result) || !result.violation);
 
 /** Category labels stored in safety_events for a verdict. */
 function categoriesOf(result: GuardResult) {

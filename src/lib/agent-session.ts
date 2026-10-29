@@ -18,6 +18,9 @@ const RECONNECT_DELAYS_MS = [1_000, 3_000, 5_000];
 const MAX_RECONNECTS_PER_CALL = 5;
 // Lines of the Vietnamese transcript given to a reconnected agent so it can pick up the conversation
 const RESUME_CONTEXT_LINES = 10;
+// Silence that ends a user turn. The default 500 ms split one spoken sentence into many turns
+// (40 turns for 17 sentences on 29/10), which led to blocked fragments and double counts
+const VAD_SILENCE_MS = Number(process.env.VAD_SILENCE_MS ?? 900);
 
 interface AgentSession {
     meetingId: string;
@@ -85,8 +88,8 @@ export async function startAgentSession(session: AgentSession, reconnect = false
         // Strict: VAD still detects turns and barge-in, but the guard decides when the agent answers
         // (the library's type lacks these two GA fields; it forwards the object unchanged)
         turn_detection: guardEnabled && guardMode === "strict"
-            ? { type: "server_vad", create_response: false, interrupt_response: true } as { type: "server_vad" }
-            : { type: "server_vad" },
+            ? { type: "server_vad", silence_duration_ms: VAD_SILENCE_MS, create_response: false, interrupt_response: true } as { type: "server_vad" }
+            : { type: "server_vad", silence_duration_ms: VAD_SILENCE_MS },
         // User transcripts are required by the Nemotron realtime guard. Without a language the
         // model guesses it and often writes Vietnamese speech as Chinese or Thai, which the
         // guard then misjudges (a neutral sovereignty question was blocked as a violation)

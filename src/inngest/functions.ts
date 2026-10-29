@@ -8,7 +8,7 @@ import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
 import { SUMMARY_MODEL } from "@/lib/models";
 import { labelPii, markersToLabels } from "@/lib/pii";
 import { getRealtimeTranscript } from "@/lib/transcript";
-import { agentReplySeverity, checkAgentReply, checkUserInput, recordSafetyEvent, recordUserInputEvents } from "@/lib/safety-events";
+import { checkUserInput, recordUserInputEvents } from "@/lib/safety-events";
 
 const summerizer = createAgent({
   name: "summarizer",
@@ -201,31 +201,19 @@ export const meetingsSafetyAudit = inngest.createFunction(
       await step.run(`audit-turns-${i}`, async () => {
         const batch = turns.slice(i, i + AUDIT_BATCH_SIZE);
 
-        // The user message is checked alone (as in the call); the pair is only used for the reply
+        // Only the user's turns: Stream's transcript is an independent transcription of what the user
+        // said (it caught a request the realtime one misheard), whereas the agent's replies are known
+        // word for word and were already checked in the call; Stream's English re-transcription of
+        // them only produced false flags ("OKKEE VIETNAM LÀ MỘT LÁ CỜ…", docs/khao-sat/agent-false-positive.md)
         await Promise.all(batch.map(async (turn) => {
-          const [userCheck, replyCheck] = await Promise.all([
-            turn.query ? checkUserInput(turn.query) : null,
-            turn.response ? checkAgentReply(turn.query, turn.response) : null,
-          ]);
-
-          if (turn.query && userCheck) {
-            await recordUserInputEvents(
-              { meetingId, source: "post_call", content: turn.query },
-              userCheck.results
-            );
+          if (!turn.query) {
+            return;
           }
-          if (turn.response && replyCheck) {
-            // A refusal to a blocked request is not the agent's violation (agentReplySeverity)
-            const userBlocked = userCheck?.severity === "block";
-            await Promise.all(replyCheck.results.map((result) => recordSafetyEvent({
-              meetingId,
-              source: "post_call",
-              role: "agent",
-              content: turn.response!,
-              result,
-              severity: agentReplySeverity(result, userBlocked),
-            })));
-          }
+          const userCheck = await checkUserInput(turn.query);
+          await recordUserInputEvents(
+            { meetingId, source: "post_call", content: turn.query },
+            userCheck.results
+          );
         }));
       });
     }

@@ -33,7 +33,8 @@ const PATTERNS: { type: PiiType; regex: RegExp; accept?: (value: string) => bool
     // An email read aloud and transcribed as words: "lan chấm nguyễn a còng gmail chấm com"
     {
         type: "email",
-        regex: /[\p{L}\p{N}_-]+(?:[\s.,]+chấm[\s.,]+[\p{L}\p{N}_-]+)*[\s.,]+(?:a còng|a móc|@)[\s.,]+[\p{L}\p{N}-]+(?:[\s.,]*(?:chấm|\.)[\s.,]*\p{L}{2,})+/giu,
+        // ("a cộng" is how the transcription heard "a còng" in the 29/10 call)
+        regex: /[\p{L}\p{N}_-]+(?:[\s.,]+chấm[\s.,]+[\p{L}\p{N}_-]+)*[\s.,]+(?:a còng|a cộng|a móc|@)[\s.,]+[\p{L}\p{N}-]+(?:[\s.,]*(?:chấm|\.)[\s.,]*\p{L}{2,})+/giu,
     },
     // 13-19 digits, optionally grouped, passing the Luhn check
     { type: "card", regex: /\b\d(?:[ -]?\d){12,18}\b/g, accept: (value) => luhn(digitsOf(value)) },
@@ -41,7 +42,8 @@ const PATTERNS: { type: PiiType; regex: RegExp; accept?: (value: string) => bool
     {
         type: "bank_account",
         // up to six words may sit between the keyword and the number ("số tài khoản để đóng học phí là …")
-        regex: /(?<=(?:tài khoản|số tk|stk|account(?: number)?|acct)(?:\s+\p{L}+){0,6}?\s*(?:là|:|số|no\.?)?\s*)\d(?:[ .-]?\d){5,18}\b/giu,
+        // groups may be split by ". " when read out ("1903. 4567 8901", Stream's transcript on 29/10)
+        regex: /(?<=(?:tài khoản|số tk|stk|account(?: number)?|acct)(?:\s+\p{L}+){0,6}?\s*(?:là|:|số|no\.?|is)?\s*)\d(?:(?:\. |[ .-])?\d){5,18}\b/giu,
     },
     // Citizen ID: 12 digits starting with 0 (province code); old ID card: 9 digits next to "CMND"
     { type: "national_id", regex: /\b0\d{11}\b/g },
@@ -52,6 +54,19 @@ const PATTERNS: { type: PiiType; regex: RegExp; accept?: (value: string) => bool
     // Money written with thousands dots (1.000.000.000) is not personal data
     { type: "number", regex: /\b\d(?:[ .-]?\d){8,}\b/g, accept: (value) => !/^\d{1,3}(?:\.\d{3})+$/.test(value) },
 ];
+
+// Numbers read out digit by digit come back from the transcription as words ("không chín một hai…");
+// nine or more digit words in a row are a number, typed like their digits would be
+const DIGIT_WORDS: Record<string, string> = { không: "0", một: "1", hai: "2", ba: "3", bốn: "4", năm: "5", sáu: "6", bảy: "7", tám: "8", chín: "9" };
+const SPOKEN_DIGITS = /(?<![\p{L}])(?:(?:không|một|hai|ba|bốn|năm|sáu|bảy|tám|chín)(?:[\s,.-]+|$)){9,}/giu;
+
+function spokenNumberType(digits: string, before: string): PiiType {
+    if (/(?:tài khoản|số tk|stk|account|acct)(?:\s+\p{L}+){0,6}?\s*(?:là|:|số)?\s*$/iu.test(before)) return "bank_account";
+    if (/^0\d{11}$/.test(digits) || /(?:cmnd|chứng minh|căn cước|cccd)(?:\s+\p{L}+){0,4}?\s*(?:là|:|số)?\s*$/iu.test(before)) return "national_id";
+    if (/^0\d{9}$/.test(digits)) return "phone";
+    if (digits.length >= 13 && luhn(digits)) return "card";
+    return "number";
+}
 
 function findPii(text: string): Match[] {
     const matches: Match[] = [];
@@ -64,6 +79,15 @@ function findPii(text: string): Match[] {
                 continue;
             }
             matches.push({ type, start, end, value: found[0] });
+        }
+    }
+    for (const found of text.matchAll(SPOKEN_DIGITS)) {
+        const value = found[0].replace(/[\s,.-]+$/, "");
+        const start = found.index!;
+        const end = start + value.length;
+        if (!overlaps(start, end)) {
+            const digits = value.toLowerCase().split(/[\s,.-]+/).map((word) => DIGIT_WORDS[word]).join("");
+            matches.push({ type: spokenNumberType(digits, text.slice(0, start)), start, end, value });
         }
     }
     return matches.sort((a, b) => a.start - b.start);

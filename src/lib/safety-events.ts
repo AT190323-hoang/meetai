@@ -102,7 +102,7 @@ export async function checkAgentReply(query: string, reply: string) {
  * before the refusal ("I understand your question, let me explain...") read against the harmful
  * request (docs/khao-sat/agent-false-positive.md): it is only logged, so the reply is not cut twice
  * and the meeting is not flagged as the agent's fault. Replies to self-harm disclosures are handled
- * in the guard (a block there has to hold on more of the reply, `isSoleContentSafetyBlock`).
+ * in the guard (a block there has to hold on more of the reply, `isSoleContentSafetyObjection`).
  */
 export function agentReplySeverity(result: GuardResult, userSeverity: Severity | null | undefined): Severity | null {
     const severity = severityOf(result, "agent");
@@ -112,9 +112,15 @@ export function agentReplySeverity(result: GuardResult, userSeverity: Severity |
     return severity;
 }
 
-/** Whether content safety is the only detector that blocks a reply (vn_policy does not object). */
-export const isSoleContentSafetyBlock = (results: GuardResult[], userSeverity: Severity | null | undefined) =>
-    results.some((result) => !isVnPolicyResult(result) && !isJailbreakResult(result) && agentReplySeverity(result, userSeverity) === "block") &&
+/**
+ * Whether content safety is the only detector objecting to a reply (block, or care: self-harm
+ * content from the agent) and vn_policy does not.
+ */
+export const isSoleContentSafetyObjection = (results: GuardResult[], userSeverity: Severity | null | undefined) =>
+    results.some((result) => {
+        const severity = !isVnPolicyResult(result) && !isJailbreakResult(result) ? agentReplySeverity(result, userSeverity) : null;
+        return severity === "block" || severity === "care";
+    }) &&
     results.every((result) => !isVnPolicyResult(result) || !result.violation);
 
 /** Category labels stored in safety_events for a verdict. */

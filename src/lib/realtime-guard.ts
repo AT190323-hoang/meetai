@@ -4,7 +4,7 @@ import type { RealtimeClient } from "@stream-io/openai-realtime-api";
 import {
     agentReplySeverity,
     checkAgentReply,
-    isSoleContentSafetyBlock,
+    isSoleContentSafetyObjection,
     checkUserInput,
     incrementBlockedTurns,
     isVnPolicyResult,
@@ -51,6 +51,12 @@ const STRICT_TIMEOUT_MS = Number(process.env.GUARD_STRICT_TIMEOUT_MS ?? 2000);
 export type GuardMode = "shadow" | "strict";
 type TurnDecision = "shadow" | "safe" | "care" | "block" | "timeout";
 
+// An utterance this short said while the agent talks ("Ừ.", "Vâng ạ") is a backchannel: VAD makes it
+// a turn and the rest of the agent's answer is paired with it. Read against "Ừ." alone, Nemotron
+// labelled a paracetamol dosage reply as weapons and violence 3/3 times (safe 3/3 against the
+// question it answers, KB3 call 29/10), so such turns are paired with the request before them.
+const BACKCHANNEL_WORDS = 2;
+
 /** One user utterance, from the end of speech to the agent's first words. */
 interface Turn {
     // Order of the user's utterances; a response answers every utterance committed before it
@@ -64,6 +70,9 @@ interface Turn {
     verdict: Promise<Severity | null>;
     // undefined until the verdict is known
     severity: Severity | null | undefined;
+    // What an agent reply to this turn is judged against: a backchannel ("Ừ.") said over the agent
+    // is joined to the request before it (see BACKCHANNEL_WORDS)
+    pairText?: string;
     setText: (text: string | null) => void;
     setVerdict: (severity: Severity | null) => void;
 }
@@ -91,9 +100,9 @@ interface ResponseState {
     isRefusal: boolean;
     // The kill-switch closing line; the call ends when it is done
     isClosing: boolean;
-    // A reply to a self-harm disclosure whose opening was blocked: acted on only if the block holds
-    // on more of the reply
-    careBlockDeferred: boolean;
+    // The reply's opening was blocked by content safety: acted on only if the block holds on more
+    // of the reply
+    openingBlockDeferred: boolean;
 }
 
 /**
@@ -129,6 +138,8 @@ export function attachRealtimeGuard(
     const responses = new Map<string, ResponseState>();
     let activeResponseId: string | null = null;
     let lastUserText = "";
+    // The last utterance longer than a backchannel
+    let lastRequestText = "";
     let pendingRefusal = false;
     let refusalQueued = false;
     // A response.create was sent and its response.created has not arrived yet
@@ -328,7 +339,7 @@ export function attachRealtimeGuard(
             transcriptDone: false,
             isRefusal: pendingRefusal,
             isClosing: killed && pendingRefusal,
-            careBlockDeferred: false,
+            openingBlockDeferred: false,
         });
         pendingRefusal = false;
     });
@@ -446,6 +457,11 @@ export function attachRealtimeGuard(
             group.endedAt = turn.speechStoppedAt ?? performance.now();
             const text = group.texts.join(" ");
             lastUserText = text;
+            const isBackchannel = text.trim().split(/\s+/).length <= BACKCHANNEL_WORDS;
+            turn.pairText = isBackchannel && lastRequestText ? `${lastRequestText} ${text}` : text;
+            if (!isBackchannel) {
+                lastRequestText = text;
+            }
             turn.setText(text);
             const transcribedAt = performance.now();
 
@@ -558,7 +574,8 @@ export function attachRealtimeGuard(
         const turn = state.turn;
         // Pair the reply with the message it answers: lastUserText may already be a newer turn, and
         // in shadow mode the answer can start before its own transcript is in
-        const query = (turn ? await within(turn.text, TURN_WAIT_MS, null) : null) ?? lastUserText;
+        const turnText = turn ? await within(turn.text, TURN_WAIT_MS, null) : null;
+        const query = (turnText !== null ? turn?.pairText ?? turnText : null) ?? lastUserText;
         const content = state.text;
         const { results, severity: verdictSeverity } = await checkAgentReply(query, content);
         state.checking = false;
@@ -572,16 +589,21 @@ export function attachRealtimeGuard(
         }
         let severity = maxSeverity(results.map((result) => agentReplySeverity(result, userSeverity)));
 
-        // Reply to a self-harm disclosure, or to a turn whose verdict is still pending (the user
-        // detectors can take several seconds): its opening line restates what the user said ("I hear
-        // you talking about hurting yourself") and Nemotron blocks it, labels and all, exactly like a
-        // harmful reply; with the rest of the reply it is judged safe, whereas harmful replies stay
-        // blocked (scripts/thuc-nghiem/care-reply-check.mjs). So the first block waits for more text.
+        // The first content-safety block (or self-harm "care") on a reply's opening is only acted on if
+        // it holds on more of the reply. Nemotron blocks short openings read against the user's message, labels and all,
+        // exactly like harmful replies, while the full reply is judged safe; harmful replies stay
+        // blocked on more text (scripts/thuc-nghiem/care-reply-check.mjs). Seen with self-harm
+        // disclosures ("I hear you talking about hurting yourself") and, in the 29/10 calls on EC2,
+        // three times after harmless turns: "I'd advise against sharing your ID number like that",
+        // a paracetamol dosage, "OK, let me handle this information safely", each with weapon and
+        // criminal-planning labels (docs/thuc-nghiem/ket-qua-chuong3-cuoc-goi.md). The cost is that
+        // a harmful reply is cut about one sentence later. Blocked user turns are handled above
+        // (agentReplySeverity), and vn_policy / jailbreak verdicts are never deferred.
         const moreTextComing = !state.transcriptDone || state.checkedLength < state.text.length;
-        const deferCareBlock = (userSeverity === "care" || userSeverity === undefined) && severity === "block" &&
-            !state.careBlockDeferred && moreTextComing && isSoleContentSafetyBlock(results, userSeverity);
-        if (deferCareBlock) {
-            state.careBlockDeferred = true;
+        const deferBlock = (severity === "block" || severity === "care") && !state.openingBlockDeferred && moreTextComing &&
+            isSoleContentSafetyObjection(results, userSeverity);
+        if (deferBlock) {
+            state.openingBlockDeferred = true;
             severity = "log";
         }
 
@@ -598,7 +620,7 @@ export function attachRealtimeGuard(
                     result,
                     caughtInTime,
                     // A deferred block is evidence, not a verdict; the next check of the reply decides
-                    severity: deferCareBlock && agentReplySeverity(result, recordedSeverity) === "block"
+                    severity: deferBlock && ["block", "care"].includes(agentReplySeverity(result, recordedSeverity) ?? "")
                         ? "log"
                         : agentReplySeverity(result, recordedSeverity),
                 });
@@ -606,8 +628,8 @@ export function attachRealtimeGuard(
         })();
 
         if (!severity || severity === "log") {
-            log(deferCareBlock
-                ? `agent chunk BLOCK deferred: reply to a ${userSeverity === "care" ? "self-harm disclosure" : "turn not judged yet"}, judged again with more text "${content}"`
+            log(deferBlock
+                ? `agent chunk BLOCK deferred: judged again with more of the reply "${content}"`
                 : verdictSeverity === "block"
                     ? `agent chunk BLOCK ignored: it answers a blocked user turn, which is already refused "${content}"`
                     : `agent chunk ${severity === "log" ? "logged" : "safe"}`, results);

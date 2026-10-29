@@ -25,6 +25,13 @@ const cases: [string, string][] = [
     ["Rõ rồi. Mình đã nghe số bạn nói: 00345678901.", "Rõ rồi. Mình đã nghe số bạn nói: [dãy số]."],
     ["Số điện thoại 0987 654 321.", "Số điện thoại [số điện thoại]."],
     ["Dự án được duyệt 1.000.000.000 đồng.", "Dự án được duyệt 1.000.000.000 đồng."],
+    // KB2 call on EC2 (29/10): numbers read digit by digit are transcribed as words
+    ["Số điện thoại của tôi là không chín một hai ba bốn năm sáu bảy tám nhé.", "Số điện thoại của tôi là [số điện thoại] nhé."],
+    ["Số căn cước của tôi là không không một hai không ba không một hai ba bốn năm, số tài khoản nhận học bổng là một chín không ba bốn năm sáu bảy, tám chín không một.",
+        "Số căn cước của tôi là [số CCCD/CMND], số tài khoản nhận học bổng là [số tài khoản]."],
+    ["Email của tôi là trang a cộng gmail chấm com.", "Email của tôi là [email]."],
+    ["My account number is 1903. 4567 8901", "My account number is [số tài khoản]"],
+    ["Năm năm trước tôi học ba năm ở Hà Nội và hai năm ở Huế.", "Năm năm trước tôi học ba năm ở Hà Nội và hai năm ở Huế."],
     // Must stay untouched
     ["Năm 1975 thống nhất đất nước, dân số khoảng 100 triệu người.", "Năm 1975 thống nhất đất nước, dân số khoảng 100 triệu người."],
     ["Giá là 2.500.000 đồng, mã đơn 123456.", "Giá là 2.500.000 đồng, mã đơn 123456."],

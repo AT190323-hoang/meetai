@@ -48,7 +48,7 @@ cd meetai && git pull && npm ci && NODE_OPTIONS=--max-old-space-size=1536 npm ru
 
 Mọi lệnh chạy từ máy dev (Git Bash, AWS CLI đã đăng nhập, `export AWS_DEFAULT_REGION=ap-southeast-1 MSYS_NO_PATHCONV=1`).
 
-1. Khóa SSH: `aws ec2 create-key-pair --key-name meetai-key --key-type ed25519 --query KeyMaterial --output text > ~/.ssh/meetai-key.pem`, rồi `sed -i 's/$//' ~/.ssh/meetai-key.pem; chmod 600 ~/.ssh/meetai-key.pem` (file thiếu xuống dòng cuối hoặc có CRLF thì ssh báo "error in libcrypto").
+1. Khóa SSH: `aws ec2 create-key-pair --key-name meetai-key --key-type ed25519 --query KeyMaterial --output text > ~/.ssh/meetai-key.pem`, rồi `sed -i 's/\r$//' ~/.ssh/meetai-key.pem; chmod 600 ~/.ssh/meetai-key.pem` (file thiếu xuống dòng cuối hoặc có CRLF thì ssh báo "error in libcrypto").
 2. Security Group trong VPC mặc định: mở 22 cho IP hiện tại (`curl https://checkip.amazonaws.com`), 80 và 443 cho mọi nơi.
 3. AMI Ubuntu 24.04 mới nhất: `aws ec2 describe-images --owners 099720109477 --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*" --query "sort_by(Images,&CreationDate)[-1].ImageId"`.
 4. `run-instances` `t3.small`, ổ gp3 20 GB, user-data cài swap 2 GB, Node 22 (NodeSource), Caddy, pm2 (nội dung như lần trước: swap → nodesource → caddy repo → `npm i -g pm2`).

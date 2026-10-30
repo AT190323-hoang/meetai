@@ -1,0 +1,91 @@
+{
+ "paragraphs": [
+  [
+   "Biểu đồ use case tổng quát mô tả toàn bộ",
+   "Biểu đồ use case tổng quát (hình 2.2) mô tả các nhóm chức năng chính của hệ thống và tác nhân sử dụng chúng."
+  ],
+  [
+   "Trong hệ thống của đề tài, sơ đồ use case tổng quát",
+   "Hệ thống có một tác nhân là Người dùng, thực hiện các thao tác quản lý tài khoản, cuộc họp, trợ lý AI và tham gia cuộc gọi video."
+  ],
+  [
+   "Nhóm chức năng Quản lý người dùng và xác thực",
+   "Nhóm Quản lý người dùng và xác thực gồm đăng ký, đăng nhập, đăng xuất và quản lý phiên làm việc; người dùng phải đăng nhập để sử dụng các chức năng còn lại."
+  ],
+  [
+   "Chức năng Quản lý các cuộc họp cho phép",
+   "Nhóm Quản lý cuộc họp gồm tạo, chỉnh sửa, xóa, tìm kiếm cuộc họp và theo dõi trạng thái cuộc họp."
+  ],
+  [
+   "Nhóm chức năng Quản lý trợ lý AI cho phép",
+   "Nhóm Quản lý trợ lý AI gồm tạo, cấu hình, chỉnh sửa và xóa agent; mỗi cuộc họp gắn với một agent."
+  ],
+  [
+   "Chức năng Quản lý cuộc gọi video và trò chuyện cho phép",
+   "Nhóm Quản lý cuộc gọi video và trò chuyện gồm tham gia cuộc gọi, bật hoặc tắt camera và micro, rời cuộc gọi và trò chuyện."
+  ],
+  [
+   "Nhóm chức năng Quản lý nội dung sau cuộc họp",
+   "Nhóm Quản lý nội dung sau cuộc họp gồm xem bản ghi hình, bản chép lời, bản tóm tắt, sự kiện an toàn và hỏi đáp với agent về nội dung cuộc họp."
+  ],
+  [
+   "Cuối cùng, chức năng Quản lý gói dịch vụ",
+   "Nhóm Quản lý gói dịch vụ và thanh toán gồm xem các gói, đăng ký, gia hạn, hủy gói và xem lịch sử thanh toán."
+  ],
+  [
+   "Tổng thể, biểu đồ use case tổng quát",
+   null
+  ],
+  [
+   "Dựa trên các biểu đồ use case đã trình bày",
+   "Các biểu đồ tuần tự dưới đây mô tả trình tự thông điệp giữa người dùng, giao diện, máy chủ và cơ sở dữ liệu cho từng use case."
+  ],
+  [
+   "Mỗi biểu đồ tuần tự tương ứng với một trường hợp",
+   null
+  ],
+  [
+   "Mô hình ngôn ngữ lớn tiếp nhận cả chỉ dẫn và dữ liệu",
+   "Mô hình ngôn ngữ lớn tiếp nhận cả chỉ dẫn và dữ liệu dưới cùng một dạng là ngôn ngữ tự nhiên; ranh giới giữa “lệnh” và “dữ liệu” không được phân tách rõ ràng. Đây là nguyên nhân của lớp tấn công nhắm trực tiếp vào hành vi của mô hình. Danh sách OWASP Top 10 cho ứng dụng LLM xếp Prompt Injection ở vị trí rủi ro số một (LLM01) [22]."
+  ]
+ ],
+ "replace": [
+  [
+   "Xu hướng Realtime AI xuất hiện cùng",
+   "các mô hình đa phương thức như GPT-4o và gpt-realtime của OpenAI",
+   "các mô hình đa phương thức như gpt-realtime của OpenAI"
+  ]
+ ],
+ "abbr_remove": [
+  "API"
+ ],
+ "abbr_set": {
+  "REST": "Representational State Transfer"
+ },
+ "abbr_add": [
+  [
+   "AWS",
+   "Amazon Web Services"
+  ],
+  [
+   "EC2",
+   "Elastic Compute Cloud"
+  ],
+  [
+   "AES-GCM",
+   "Advanced Encryption Standard – Galois/Counter Mode"
+  ],
+  [
+   "CCCD",
+   "Căn cước công dân"
+  ],
+  [
+   "JSON",
+   "JavaScript Object Notation"
+  ],
+  [
+   "NeMo",
+   "NVIDIA NeMo (bộ công cụ AI của NVIDIA)"
+  ]
+ ]
+}

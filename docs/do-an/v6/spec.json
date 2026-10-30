@@ -1,0 +1,27 @@
+{
+ "src": "docs/ĐỒ ÁN - bản sửa.docx",
+ "out": "docs/ĐỒ ÁN - v6.docx",
+ "img_dir": "docs/thuc-nghiem/anh",
+ "ranges": [
+  {
+   "md": "docs/do-an/v6/chuong-1.md",
+   "start": "Kênh giọng nói còn có những đặc thù",
+   "end": "CHƯƠNG 2. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG AI AGENT AN TOÀN"
+  },
+  {
+   "md": "docs/do-an/v6/chuong-2a.md",
+   "start": "CHƯƠNG 2. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG AI AGENT AN TOÀN",
+   "end": "2.3.1. Các chức năng quản lý cuộc họp an toàn"
+  },
+  {
+   "md": "docs/do-an/v6/chuong-2b.md",
+   "start": "Hình 2.34: Biểu đồ tuần tự",
+   "end": "CHƯƠNG 3. THỰC NGHIỆM VÀ ĐÁNH GIÁ"
+  },
+  {
+   "md": "docs/do-an/v6/chuong-3.md",
+   "start": "CHƯƠNG 3. THỰC NGHIỆM VÀ ĐÁNH GIÁ",
+   "end": "KẾT LUẬN"
+  }
+ ]
+}
